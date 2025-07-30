@@ -23,8 +23,11 @@ const memory = {
 
     _RESERVED: 127,
 
+    // Persistent area for cart data (scores, settings, etc.)
+    PERSISTENT: 256, // 0xa0
+
     // Framebuffer should be 64 bit aligned
-    FRAMEBUFFER: FRAMEBUFFER_SIZE_BYTES, // 0xa0
+    FRAMEBUFFER: FRAMEBUFFER_SIZE_BYTES, // 0x1a0
 };
 
 const cTypes = {
@@ -40,6 +43,7 @@ const cTypes = {
     SYSTEM_FLAGS: "uint8_t",
     NETPLAY: "const uint8_t",
     FRAMEBUFFER: "uint8_t",
+    PERSISTENT: "uint8_t",
 };
 
 const rustTypes = {
@@ -55,6 +59,7 @@ const rustTypes = {
     SYSTEM_FLAGS: "*mut u8",
     NETPLAY: "*const u8",
     FRAMEBUFFER: "*mut [u8; 6400]",
+    PERSISTENT: "*mut [u8; 256]",
 };
 
 const goTypes = {
@@ -70,6 +75,7 @@ const goTypes = {
     SYSTEM_FLAGS: "uint8",
     NETPLAY: "uint8",
     FRAMEBUFFER: "[6400]uint8",
+    PERSISTENT: "[256]uint8",
 };
 
 const neluaTypes = {
@@ -85,6 +91,7 @@ const neluaTypes = {
     SYSTEM_FLAGS: "uint8",
     NETPLAY: "uint8",
     FRAMEBUFFER: "[6400]uint8",
+    PERSISTENT: "[256]uint8",
 };
 
 function generateDefinitions(generateDefinition, types) {

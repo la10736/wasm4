@@ -18,7 +18,7 @@ import { bitmask, identity } from '../../utils/functions';
 
 export const wasm4DevtoolsTagName = 'wasm4-devtools' as const;
 
-const tabs = ['general', 'controls', 'mem', 'info'] as const;
+const tabs = ['general', 'controls', 'mem', 'persistent', 'info'] as const;
 
 const colorMasks = [bitmask(3), bitmask(7, 3), bitmask(11, 7), bitmask(15, 11)];
 
@@ -159,6 +159,12 @@ export class Wasm4Devtools extends LitElement {
     ></wasm4-memory-view>`;
   };
 
+  private _renderPersistentView = ({ memoryView }: UpdateControllerState) => {
+    return html`<wasm4-persistent-view
+      .memoryView=${memoryView}
+    ></wasm4-persistent-view>`;
+  };
+
   private _renderTab = (updateControllerState: UpdateControllerState) => {
     let renderTab;
     switch (this._activeTab) {
@@ -170,6 +176,9 @@ export class Wasm4Devtools extends LitElement {
         break;
       case 'mem':
         renderTab = this._renderMemory;
+        break;
+      case 'persistent':
+        renderTab = this._renderPersistentView;
         break;
       default:
         renderTab = this._renderGeneralView;

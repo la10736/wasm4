@@ -66,6 +66,7 @@ export class MemoryView implements MemoryViewComputedProperties {
       return dataView.getUint8(idx);
     };
 
+
     this.byteLen = dataView.byteLength;
   }
 }

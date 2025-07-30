@@ -17,7 +17,8 @@ export const ADDR_MOUSE_X = 0x1a;
 export const ADDR_MOUSE_Y = 0x1c;
 export const ADDR_MOUSE_BUTTONS = 0x1e;
 export const ADDR_SYSTEM_FLAGS = 0x1f;
-export const ADDR_FRAMEBUFFER = 0xa0;
+export const ADDR_PERSISTENT = 0xa0;
+export const ADDR_FRAMEBUFFER = 0x1a0;
 
 export const BUTTON_X = 1;
 export const BUTTON_Z = 2;
@@ -87,12 +88,16 @@ export const memoryMap: Readonly<Record<string, Range>> = {
     offset: 0x0020,
     len: 128,
   },
+  PERSISTENT: {
+    offset: ADDR_PERSISTENT,
+    len: 256,
+  },
   FRAMEBUFFER: {
     offset: ADDR_FRAMEBUFFER,
     len: 6400,
   },
   PROGRAM_MEMORY: {
-    offset: 0x19a0,
-    len: 58976,
+    offset: 0x1aa0,  // Starts after framebuffer
+    len: 58720,      // Unchanged
   },
 };

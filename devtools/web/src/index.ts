@@ -4,6 +4,7 @@ export * from './components/gamepad/gamepad';
 export * from './components/controls-view/controls-view';
 export * from './components/mouse-buttons/mouse-buttons';
 export * from './components/memory-view/memory-view';
+export * from './components/persistent-view/persistent-view';
 export * from './components/info-view/info-view';
 export * from './events/update-completed';
 export * from './events/close-devtools';

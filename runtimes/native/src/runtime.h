@@ -117,8 +117,9 @@ typedef struct {
     uint8_t mouseButtons;
     uint8_t systemFlags;
     uint8_t _reserved[128];
+    uint8_t persistent[256];  // Persistent area for cart data (scores, settings, etc.)
     uint8_t framebuffer[160*160>>2];
-    uint8_t _user[58976];
+    uint8_t _user[58720];     // Reduced by 256 bytes to accommodate persistent area
 } Memory;
 #pragma pack()
 
