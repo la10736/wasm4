@@ -20,6 +20,250 @@ class InputState {
     mouseButtons = 0;
 }
 
+// Gamepad event types
+const enum GamepadEventType {
+    PRESS = 0,
+    RELEASE = 1
+}
+
+// Gamepad event structure
+interface GamepadEvent {
+    frame: number;
+    playerIdx: number;
+    button: number;
+    eventType: GamepadEventType;
+}
+
+// Gamepad event recorder
+class GamepadEventRecorder {
+    private events: GamepadEvent[] = [];
+    private previousGamepadState = [0, 0, 0, 0];
+    private currentFrame = 0;
+    private isRecording = false;
+    private isPlaying = false;
+    private playbackEvents: GamepadEvent[] = [];
+    private playbackFrame = 0;
+
+    startRecording() {
+        this.isRecording = true;
+        this.events = [];
+        this.currentFrame = 0;
+        this.previousGamepadState = [0, 0, 0, 0];
+        console.log("Started gamepad event recording");
+    }
+
+    stopRecording() {
+        this.isRecording = false;
+        console.log(`Stopped gamepad event recording. Recorded ${this.events.length} events.`);
+    }
+
+    get isRecordingActive(): boolean {
+        return this.isRecording;
+    }
+
+    get isPlayingActive(): boolean {
+        return this.isPlaying;
+    }
+
+    startPlayback(events: GamepadEvent[]) {
+        this.isPlaying = true;
+        this.playbackEvents = [...events];
+        this.playbackFrame = 0;
+        console.log(`Started playback of ${events.length} events`);
+    }
+
+    stopPlayback() {
+        this.isPlaying = false;
+        this.playbackEvents = [];
+        this.playbackFrame = 0;
+        console.log("Stopped playback");
+    }
+
+    getPlaybackGamepadState(): number[] {
+        if (!this.isPlaying) {
+            return [0, 0, 0, 0];
+        }
+
+        const gamepadState = [0, 0, 0, 0];
+        
+        // Apply all events up to current frame
+        for (const event of this.playbackEvents) {
+            if (event.frame <= this.playbackFrame) {
+                if (event.eventType === GamepadEventType.PRESS) {
+                    gamepadState[event.playerIdx] |= event.button;
+                } else if (event.eventType === GamepadEventType.RELEASE) {
+                    gamepadState[event.playerIdx] &= ~event.button;
+                }
+            }
+        }
+        
+        this.playbackFrame++;
+        return gamepadState;
+    }
+
+    loadFromFile(): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.bin';
+            
+            input.onchange = (e) => {
+                const file = (e.target as HTMLInputElement).files?.[0];
+                if (!file) {
+                    reject(new Error('No file selected'));
+                    return;
+                }
+                
+                const reader = new FileReader();
+                reader.onload = () => {
+                    try {
+                        const data = new Uint8Array(reader.result as ArrayBuffer);
+                        const events = this.deserializeFromByteStream(data);
+                        this.startPlayback(events);
+                        console.log(`Loaded ${events.length} events from file`);
+                        resolve();
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                reader.onerror = () => reject(new Error('Failed to read file'));
+                reader.readAsArrayBuffer(file);
+            };
+            
+            input.oncancel = () => reject(new Error('File selection cancelled'));
+            
+            document.body.appendChild(input);
+            input.click();
+            document.body.removeChild(input);
+        });
+    }
+
+    recordFrame(gamepadState: number[]) {
+        if (!this.isRecording) return;
+
+        // Check each player's gamepad for changes
+        for (let playerIdx = 0; playerIdx < 4; playerIdx++) {
+            const prevState = this.previousGamepadState[playerIdx];
+            const currState = gamepadState[playerIdx];
+            
+            // Check each button bit
+            for (let buttonBit = 0; buttonBit < 8; buttonBit++) {
+                const buttonMask = 1 << buttonBit;
+                const wasPressed = (prevState & buttonMask) !== 0;
+                const isPressed = (currState & buttonMask) !== 0;
+                
+                // Record press event
+                if (!wasPressed && isPressed) {
+                    this.events.push({
+                        frame: this.currentFrame,
+                        playerIdx,
+                        button: buttonMask,
+                        eventType: GamepadEventType.PRESS
+                    });
+                }
+                
+                // Record release event
+                if (wasPressed && !isPressed) {
+                    this.events.push({
+                        frame: this.currentFrame,
+                        playerIdx,
+                        button: buttonMask,
+                        eventType: GamepadEventType.RELEASE
+                    });
+                }
+            }
+        }
+        
+        // Update previous state and increment frame
+        this.previousGamepadState = [...gamepadState];
+        this.currentFrame++;
+    }
+
+    getEvents(): GamepadEvent[] {
+        return [...this.events];
+    }
+
+    serializeToByteStream(): Uint8Array {
+        // Calculate buffer size: 4 bytes header + 8 bytes per event
+        const headerSize = 4; // 4 bytes for event count
+        const eventSize = 8; // 4 bytes frame + 1 byte player + 1 byte button + 1 byte type + 1 byte padding
+        const bufferSize = headerSize + (this.events.length * eventSize);
+        
+        const buffer = new ArrayBuffer(bufferSize);
+        const view = new DataView(buffer);
+        
+        // Write header: event count (4 bytes)
+        view.setUint32(0, this.events.length, true); // little endian
+        
+        // Write events
+        let offset = headerSize;
+        for (const event of this.events) {
+            view.setUint32(offset, event.frame, true);     // Frame number (4 bytes)
+            view.setUint8(offset + 4, event.playerIdx);    // Player index (1 byte)
+            view.setUint8(offset + 5, event.button);       // Button mask (1 byte)
+            view.setUint8(offset + 6, event.eventType);    // Event type (1 byte)
+            view.setUint8(offset + 7, 0);                  // Padding (1 byte)
+            offset += eventSize;
+        }
+        
+        return new Uint8Array(buffer);
+    }
+
+    deserializeFromByteStream(data: Uint8Array): GamepadEvent[] {
+        const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+        
+        // Read header: event count
+        const eventCount = view.getUint32(0, true);
+        const events: GamepadEvent[] = [];
+        
+        // Read events
+        const headerSize = 4;
+        const eventSize = 8;
+        let offset = headerSize;
+        
+        for (let i = 0; i < eventCount; i++) {
+            events.push({
+                frame: view.getUint32(offset, true),
+                playerIdx: view.getUint8(offset + 4),
+                button: view.getUint8(offset + 5),
+                eventType: view.getUint8(offset + 6)
+            });
+            offset += eventSize;
+        }
+        
+        return events;
+    }
+
+    exportToFile() {
+        const data = this.serializeToByteStream();
+        const blob = new Blob([data], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `gamepad-events-${Date.now()}.bin`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        URL.revokeObjectURL(url);
+        console.log(`Exported ${this.events.length} gamepad events to file`);
+    }
+
+    getRecordingSummary(): string {
+        if (!this.isRecording && this.events.length === 0) {
+            return "No recording available";
+        }
+        
+        const status = this.isRecording ? "Recording" : "Stopped";
+        const frameCount = this.currentFrame;
+        const eventCount = this.events.length;
+        const byteSize = this.serializeToByteStream().length;
+        
+        return `${status} | Frame: ${frameCount} | Events: ${eventCount} | Size: ${byteSize} bytes`;
+    }
+}
+
 @customElement("wasm4-app")
 export class App extends LitElement {
     static styles = css`
@@ -72,6 +316,7 @@ export class App extends LitElement {
 
     readonly inputState = new InputState();
     private readonly gamepadUnavailableWarned = new Set<string>();
+    private readonly gamepadRecorder = new GamepadEventRecorder();
 
     private netplay?: Netplay;
 
@@ -239,16 +484,59 @@ export class App extends LitElement {
             event.preventDefault();
         });
 
-        const HOTKEYS: Record<string, (...args:any[]) => any> = {
-            "2": this.saveGameState.bind(this),
-            "4": this.loadGameState.bind(this),
-            "r": this.resetCart.bind(this),
-            "R": this.resetCart.bind(this),
-            "F8": devtoolsManager.toggleDevtools,
-            "F9": takeScreenshot,
-            "F10": recordVideo,
-            "F11": utils.requestFullscreen,
-            "Enter": this.onMenuButtonPressed.bind(this),
+        const HOTKEYS: Record<string, () => void> = {
+            "F1": () => this.onMenuButtonPressed(),
+            "F2": () => takeScreenshot(),
+            "F3": () => recordVideo(),
+            "F4": () => {
+                if (this.gamepadRecorder.isRecordingActive) {
+                    this.gamepadRecorder.stopRecording();
+                    this.notifications.show("Gamepad recording stopped");
+                } else {
+                    // Restart runtime when starting recording to not lose any frames
+                    this.resetCart(undefined, false).then(() => {
+                        this.gamepadRecorder.startRecording();
+                        this.notifications.show("Runtime restarted - Gamepad recording started");
+                    }).catch(() => {
+                        this.notifications.show("Failed to restart runtime");
+                    });
+                }
+            },
+            "F5": () => {
+                if (this.gamepadRecorder.getEvents().length > 0) {
+                    this.gamepadRecorder.exportToFile();
+                    this.notifications.show("Gamepad events exported");
+                } else {
+                    this.notifications.show("No gamepad events to export");
+                }
+            },
+            "F6": () => {
+                const summary = this.gamepadRecorder.getRecordingSummary();
+                this.notifications.show(summary);
+                console.log("Gamepad Recording Status:", summary);
+            },
+            "F7": () => {
+                if (this.gamepadRecorder.isPlayingActive) {
+                    this.gamepadRecorder.stopPlayback();
+                    this.notifications.show("Gamepad playback stopped");
+                } else {
+                    // Load file and restart runtime for playback
+                    this.gamepadRecorder.loadFromFile().then(() => {
+                        return this.resetCart(undefined, false);
+                    }).then(() => {
+                        this.notifications.show("Runtime restarted - Gamepad playback started");
+                    }).catch((error) => {
+                        console.error("Failed to load gamepad events:", error);
+                        this.notifications.show("Failed to load gamepad events");
+                    });
+                }
+            },
+            "F8": () => {
+                this.showHotkeyHelp();
+            },
+            "F9": () => this.resetCart(),
+            "r": () => this.resetCart(),
+            "R": () => this.resetCart(),
         };
 
         const onKeyboardEvent = (event: KeyboardEvent) => {
@@ -459,17 +747,27 @@ export class App extends LitElement {
             }
 
             while (timeFrameStart >= timeNextUpdate) {
-                timeNextUpdate += 1000/60;
+                timeNextUpdate += 1000/6;
+                console.log("Update");
+
+                // Use playback events if playing, otherwise use real input
+                let gamepadToUse = input.gamepad;
+                if (this.gamepadRecorder.isPlayingActive) {
+                    gamepadToUse = this.gamepadRecorder.getPlaybackGamepadState();
+                } else {
+                    // Record gamepad events for this frame only when not playing back
+                    this.gamepadRecorder.recordFrame(input.gamepad);
+                }
 
                 if (this.netplay) {
-                    if (this.netplay.update(input.gamepad[0])) {
+                    if (this.netplay.update(gamepadToUse[0])) {
                         calledUpdate = true;
                     }
 
                 } else {
                     // Pass inputs into runtime memory
                     for (let playerIdx = 0; playerIdx < 4; ++playerIdx) {
-                        runtime.setGamepad(playerIdx, input.gamepad[playerIdx]);
+                        runtime.setGamepad(playerIdx, gamepadToUse[playerIdx]);
                     }
                     runtime.setMouse(input.mouseX, input.mouseY, input.mouseButtons);
                     runtime.update();
@@ -498,6 +796,34 @@ export class App extends LitElement {
         } else {
             this.showMenu = true;
         }
+    }
+
+    showHotkeyHelp() {
+        const helpText = [
+            "🎮 WASM-4 Hotkeys:",
+            "F1 - Open Menu",
+            "F2 - Take Screenshot", 
+            "F3 - Record Video",
+            "F4 - Start/Stop Gamepad Recording",
+            "F5 - Export Gamepad Events",
+            "F6 - Show Recording Status",
+            "F7 - Load & Replay Events",
+            "F8 - Show This Help",
+            "F9/R - Reset Cart"
+        ].join(" | ");
+        
+        this.notifications.show(helpText);
+        console.log("WASM-4 Hotkeys:\n" + [
+            "F1 - Open Menu",
+            "F2 - Take Screenshot", 
+            "F3 - Record Video",
+            "F4 - Start/Stop Gamepad Recording (restarts runtime)",
+            "F5 - Export Gamepad Events to file",
+            "F6 - Show Recording Status",
+            "F7 - Load & Replay Events from file (restarts runtime)",
+            "F8 - Show This Help",
+            "F9/R - Reset Cart"
+        ].join("\n"));
     }
 
     closeMenu () {
