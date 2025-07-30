@@ -1,5 +1,6 @@
 #include <MiniFB.h>
 #include <stdio.h>
+#include <time.h>
 
 #include "../window.h"
 #include "../runtime.h"
@@ -22,6 +23,11 @@ void w4_windowBoot (const char* title) {
     struct mfb_window* window = mfb_open_ex(title, viewportSize, viewportSize, WF_RESIZABLE);
 
     mfb_set_resize_callback(window, onResize);
+    
+    // Target 15 FPS (66.67ms per frame)
+    const double targetFrameTime = 1.0 / 6.0;
+    struct timespec lastTime, currentTime;
+    clock_gettime(CLOCK_MONOTONIC, &lastTime);
 
     do {
         // Keyboard handling
@@ -92,6 +98,23 @@ void w4_windowBoot (const char* title) {
         if (mfb_update_ex(window, pixels, 160, 160) < 0) {
             break;
         }
+        
+        // Frame rate limiting to 15 FPS
+        clock_gettime(CLOCK_MONOTONIC, &currentTime);
+        double elapsed = (currentTime.tv_sec - lastTime.tv_sec) + 
+                        (currentTime.tv_nsec - lastTime.tv_nsec) / 1000000000.0;
+        
+        if (elapsed < targetFrameTime) {
+            double sleepTime = targetFrameTime - elapsed;
+            struct timespec sleepSpec = {
+                .tv_sec = (time_t)sleepTime,
+                .tv_nsec = (long)((sleepTime - (time_t)sleepTime) * 1000000000)
+            };
+            nanosleep(&sleepSpec, NULL);
+        }
+        
+        lastTime = currentTime;
+        
     } while (mfb_wait_sync(window));
 }
 
