@@ -16,21 +16,7 @@
 
 #define SYSTEM_PRESERVE_FRAMEBUFFER 1
 
-#pragma pack(1)
-typedef struct {
-    uint8_t _padding[4];
-    uint32_t palette[4];
-    uint8_t drawColors[2];
-    uint8_t gamepads[4];
-    int16_t mouseX;
-    int16_t mouseY;
-    uint8_t mouseButtons;
-    uint8_t systemFlags;
-    uint8_t _reserved[128];
-    uint8_t framebuffer[WIDTH*HEIGHT>>2];
-    uint8_t _user[58976];
-} Memory;
-#pragma pack()
+
 
 typedef struct {
     Memory memory;
@@ -38,8 +24,15 @@ typedef struct {
     bool firstFrame;
 } SerializedState;
 
-static Memory* memory;
-static w4_Disk* disk;
+static w4_ExitInfo exitInfo = {0};
+static w4_InputEvent inputEvents[1024];
+static int inputEventCount = 0;
+static bool recordingInput = false;
+static uint32_t frameNumber = 0;
+w4_GamepadRecorder gamepadRecorder = {0};
+
+Memory* memory;
+w4_Disk* disk;
 static bool firstFrame;
 
 static void panic(const char *msg)
@@ -73,16 +66,20 @@ static void bounds_check(const void *sp, size_t sz)
     }
 }
 
-static void bounds_check_cstr(const char *p)
+static void bounds_check_cstr(const void* p)
 {
-    const void *memory_sp = (const void *)memory;
-    const void *memory_ep = (const uint8_t *)memory_sp + (1 << 16);
-    if (p < memory_sp || memory_ep <= p) {
+    const uint8_t* memory_sp = (uint8_t*)memory;
+    const uint8_t* memory_ep = memory_sp + (1 << 16);
+    const uint8_t* ptr_p = (const uint8_t*)p;
+    if (ptr_p < memory_sp || memory_ep <= ptr_p) {
         out_of_bounds_access();
     }
-    while (*p++ != 0) {
-        if (memory_ep <= p) {
+    for (const uint8_t* ptr = ptr_p; ; ++ptr) {
+        if (memory_ep <= ptr) {
             out_of_bounds_access();
+        }
+        if (*ptr == 0) {
+            break;
         }
     }
 }
@@ -103,6 +100,33 @@ void w4_runtimeInit (uint8_t* memoryBytes, w4_Disk* diskBytes) {
     w4_write16LE(&memory->mouseX, 0x7fff);
     w4_write16LE(&memory->mouseY, 0x7fff);
 
+    // Initialize gamepad recorder
+    w4_gamepadRecorderInit(&gamepadRecorder);
+
+    w4_apuInit();
+    w4_framebufferInit(memory->drawColors, memory->framebuffer);
+}
+
+void w4_runtimeReset (void) {
+    if (memory == NULL) {
+        return; // Runtime not initialized
+    }
+    
+    // Reset memory to initial state (but don't re-initialize WASM)
+    // memset(memory, 0, sizeof(Memory));
+    w4_write32LE(&memory->palette[0], 0xe0f8cf);
+    w4_write32LE(&memory->palette[1], 0x86c06c);
+    w4_write32LE(&memory->palette[2], 0x306850);
+    w4_write32LE(&memory->palette[3], 0x071821);
+    memory->drawColors[0] = 0x03;
+    memory->drawColors[1] = 0x12;
+    w4_write16LE(&memory->mouseX, 0x7fff);
+    w4_write16LE(&memory->mouseY, 0x7fff);
+    
+    // Reset frame counter
+    firstFrame = true;
+    
+    // Re-initialize audio and framebuffer
     w4_apuInit();
     w4_framebufferInit(memory->drawColors, memory->framebuffer);
 }
@@ -311,4 +335,235 @@ void w4_runtimeUnserialize (const void* src) {
     memcpy(memory, &state->memory, 1 << 16);
     memcpy(disk, &state->disk, sizeof(w4_Disk));
     firstFrame = state->firstFrame;
+}
+
+// Gamepad recording function implementations
+void w4_gamepadRecorderInit(w4_GamepadRecorder* recorder) {
+    memset(recorder, 0, sizeof(w4_GamepadRecorder));
+    recorder->playbackEvents = NULL;
+}
+
+void w4_gamepadRecorderStartRecording(w4_GamepadRecorder* recorder) {
+    recorder->isRecording = 1;
+    recorder->eventCount = 0;
+    recorder->currentFrame = 0;
+    memset(recorder->previousGamepadState, 0, 4);
+    printf("Started gamepad event recording\n");
+}
+
+void w4_gamepadRecorderStopRecording(w4_GamepadRecorder* recorder) {
+    recorder->isRecording = 0;
+    printf("Stopped gamepad event recording. Recorded %u events.\n", recorder->eventCount);
+}
+
+void w4_gamepadRecorderRecordFrame(w4_GamepadRecorder* recorder, const uint8_t gamepadState[4]) {
+    if (!recorder->isRecording) return;
+    
+    // Check each player's gamepad for changes
+    for (int playerIdx = 0; playerIdx < 4; playerIdx++) {
+        uint8_t prevState = recorder->previousGamepadState[playerIdx];
+        uint8_t currState = gamepadState[playerIdx];
+        
+        // Check each button bit
+        for (int buttonBit = 0; buttonBit < 8; buttonBit++) {
+            uint8_t buttonMask = 1 << buttonBit;
+            bool wasPressed = (prevState & buttonMask) != 0;
+            bool isPressed = (currState & buttonMask) != 0;
+            
+            // Record press event
+            if (!wasPressed && isPressed && recorder->eventCount < 4096) {
+                w4_GamepadEvent* event = &recorder->events[recorder->eventCount++];
+                event->frame = recorder->currentFrame;
+                event->playerIdx = playerIdx;
+                event->button = buttonMask;
+                event->eventType = W4_GAMEPAD_EVENT_PRESS;
+                event->padding = 0;
+            }
+            
+            // Record release event
+            if (wasPressed && !isPressed && recorder->eventCount < 4096) {
+                w4_GamepadEvent* event = &recorder->events[recorder->eventCount++];
+                event->frame = recorder->currentFrame;
+                event->playerIdx = playerIdx;
+                event->button = buttonMask;
+                event->eventType = W4_GAMEPAD_EVENT_RELEASE;
+                event->padding = 0;
+            }
+        }
+    }
+    
+    // Update previous state and increment frame
+    memcpy(recorder->previousGamepadState, gamepadState, 4);
+    recorder->currentFrame++;
+}
+
+void w4_gamepadRecorderStartPlayback(w4_GamepadRecorder* recorder, const w4_GamepadEvent* events, uint32_t eventCount) {
+    recorder->isPlaying = 1;
+    recorder->playbackEvents = (w4_GamepadEvent*)events;
+    recorder->playbackEventCount = eventCount;
+    recorder->playbackFrame = 0;
+    printf("Started playback of %u events\n", eventCount);
+}
+
+void w4_gamepadRecorderStopPlayback(w4_GamepadRecorder* recorder) {
+    recorder->isPlaying = 0;
+    recorder->playbackEvents = NULL;
+    recorder->playbackEventCount = 0;
+    recorder->playbackFrame = 0;
+    printf("Stopped playback\n");
+}
+
+void w4_gamepadRecorderGetPlaybackState(w4_GamepadRecorder* recorder, uint8_t gamepadState[4]) {
+    memset(gamepadState, 0, 4);
+    
+    if (!recorder->isPlaying || !recorder->playbackEvents) {
+        return;
+    }
+    
+    // Apply all events up to current frame
+    for (uint32_t i = 0; i < recorder->playbackEventCount; i++) {
+        const w4_GamepadEvent* event = &recorder->playbackEvents[i];
+        if (event->frame <= recorder->playbackFrame) {
+            if (event->eventType == W4_GAMEPAD_EVENT_PRESS) {
+                gamepadState[event->playerIdx] |= event->button;
+            } else if (event->eventType == W4_GAMEPAD_EVENT_RELEASE) {
+                gamepadState[event->playerIdx] &= ~event->button;
+            }
+        }
+    }
+    
+    recorder->playbackFrame++;
+}
+
+int w4_gamepadRecorderSerialize(const w4_GamepadRecorder* recorder, uint8_t* dest, int maxSize) {
+    // Calculate required size: 4 bytes header + 8 bytes per event
+    int headerSize = 4;
+    int eventSize = 8;
+    int requiredSize = headerSize + (recorder->eventCount * eventSize);
+    
+    if (requiredSize > maxSize) {
+        return -1; // Not enough space
+    }
+    
+    // Write header: event count (4 bytes, little endian)
+    dest[0] = recorder->eventCount & 0xFF;
+    dest[1] = (recorder->eventCount >> 8) & 0xFF;
+    dest[2] = (recorder->eventCount >> 16) & 0xFF;
+    dest[3] = (recorder->eventCount >> 24) & 0xFF;
+    
+    // Write events
+    int offset = headerSize;
+    for (uint32_t i = 0; i < recorder->eventCount; i++) {
+        const w4_GamepadEvent* event = &recorder->events[i];
+        
+        // Frame number (4 bytes, little endian)
+        dest[offset + 0] = event->frame & 0xFF;
+        dest[offset + 1] = (event->frame >> 8) & 0xFF;
+        dest[offset + 2] = (event->frame >> 16) & 0xFF;
+        dest[offset + 3] = (event->frame >> 24) & 0xFF;
+        
+        // Player index, button, event type, padding (4 bytes)
+        dest[offset + 4] = event->playerIdx;
+        dest[offset + 5] = event->button;
+        dest[offset + 6] = event->eventType;
+        dest[offset + 7] = 0; // padding
+        
+        offset += eventSize;
+    }
+    
+    return requiredSize;
+}
+
+int w4_gamepadRecorderDeserialize(w4_GamepadRecorder* recorder, const uint8_t* src, int size) {
+    if (size < 4) {
+        return -1; // Invalid size
+    }
+    
+    // Read header: event count (4 bytes, little endian)
+    uint32_t eventCount = src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
+    
+    int headerSize = 4;
+    int eventSize = 8;
+    int expectedSize = headerSize + (eventCount * eventSize);
+    
+    if (size != expectedSize || eventCount > 4096) {
+        return -1; // Invalid data
+    }
+    
+    // Read events
+    int offset = headerSize;
+    for (uint32_t i = 0; i < eventCount; i++) {
+        w4_GamepadEvent* event = &recorder->events[i];
+        
+        // Frame number (4 bytes, little endian)
+        event->frame = src[offset + 0] | (src[offset + 1] << 8) | 
+                      (src[offset + 2] << 16) | (src[offset + 3] << 24);
+        
+        // Player index, button, event type
+        event->playerIdx = src[offset + 4];
+        event->button = src[offset + 5];
+        event->eventType = src[offset + 6];
+        event->padding = 0;
+        
+        offset += eventSize;
+    }
+    
+    recorder->eventCount = eventCount;
+    return 0;
+}
+
+void w4_gamepadRecorderExportToFile(const w4_GamepadRecorder* recorder, const char* filename) {
+    uint8_t buffer[32768]; // 32KB buffer should be enough for most recordings
+    int size = w4_gamepadRecorderSerialize(recorder, buffer, sizeof(buffer));
+    
+    if (size > 0) {
+        FILE* file = fopen(filename, "wb");
+        if (file) {
+            fwrite(buffer, 1, size, file);
+            fclose(file);
+            printf("Exported %u gamepad events to %s (%d bytes)\n", recorder->eventCount, filename, size);
+        } else {
+            printf("Failed to open file %s for writing\n", filename);
+        }
+    } else {
+        printf("Failed to serialize gamepad events\n");
+    }
+}
+
+int w4_gamepadRecorderLoadFromFile(w4_GamepadRecorder* recorder, const char* filename) {
+    FILE* file = fopen(filename, "rb");
+    if (!file) {
+        printf("Failed to open file %s for reading\n", filename);
+        return -1;
+    }
+    
+    // Get file size
+    fseek(file, 0, SEEK_END);
+    long fileSize = ftell(file);
+    fseek(file, 0, SEEK_SET);
+    
+    if (fileSize > 32768) {
+        printf("File %s is too large (%ld bytes)\n", filename, fileSize);
+        fclose(file);
+        return -1;
+    }
+    
+    uint8_t buffer[32768];
+    size_t bytesRead = fread(buffer, 1, fileSize, file);
+    fclose(file);
+    
+    if (bytesRead != fileSize) {
+        printf("Failed to read complete file %s\n", filename);
+        return -1;
+    }
+    
+    int result = w4_gamepadRecorderDeserialize(recorder, buffer, fileSize);
+    if (result == 0) {
+        printf("Loaded %u gamepad events from %s\n", recorder->eventCount, filename);
+        w4_gamepadRecorderStartPlayback(recorder, recorder->events, recorder->eventCount);
+    } else {
+        printf("Failed to deserialize gamepad events from %s\n", filename);
+    }
+    
+    return result;
 }

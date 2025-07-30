@@ -20,7 +20,47 @@ typedef struct {
     uint8_t data[1024];
 } w4_Disk;
 
+// Exit info structure
+typedef struct {
+    int exitCode;
+    char message[256];
+} w4_ExitInfo;
+
+// Input event structure
+typedef struct {
+    uint32_t frame;
+    uint8_t type;
+    uint8_t data[8];
+} w4_InputEvent;
+
+// Gamepad event recording structures
+typedef enum {
+    W4_GAMEPAD_EVENT_PRESS = 0,
+    W4_GAMEPAD_EVENT_RELEASE = 1
+} w4_GamepadEventType;
+
+typedef struct {
+    uint32_t frame;
+    uint8_t playerIdx;
+    uint8_t button;
+    uint8_t eventType;
+    uint8_t padding;
+} w4_GamepadEvent;
+
+typedef struct {
+    w4_GamepadEvent events[4096];  // Max 4096 events
+    uint32_t eventCount;
+    uint32_t currentFrame;
+    uint8_t previousGamepadState[4];
+    uint8_t isRecording;
+    uint8_t isPlaying;
+    uint32_t playbackFrame;
+    uint32_t playbackEventCount;
+    w4_GamepadEvent* playbackEvents;
+} w4_GamepadRecorder;
+
 void w4_runtimeInit (uint8_t* memory, w4_Disk* disk);
+void w4_runtimeReset (void);
 
 void w4_runtimeSetGamepad (int idx, uint8_t gamepad);
 void w4_runtimeSetMouse (int16_t x, int16_t y, uint8_t buttons);
@@ -51,3 +91,38 @@ void w4_runtimeUpdate ();
 int w4_runtimeSerializeSize ();
 void w4_runtimeSerialize (void* dest);
 void w4_runtimeUnserialize (const void* src);
+
+// Gamepad recording functions
+void w4_gamepadRecorderInit (w4_GamepadRecorder* recorder);
+void w4_gamepadRecorderStartRecording (w4_GamepadRecorder* recorder);
+void w4_gamepadRecorderStopRecording (w4_GamepadRecorder* recorder);
+void w4_gamepadRecorderRecordFrame (w4_GamepadRecorder* recorder, const uint8_t gamepadState[4]);
+void w4_gamepadRecorderStartPlayback (w4_GamepadRecorder* recorder, const w4_GamepadEvent* events, uint32_t eventCount);
+void w4_gamepadRecorderStopPlayback (w4_GamepadRecorder* recorder);
+void w4_gamepadRecorderGetPlaybackState (w4_GamepadRecorder* recorder, uint8_t gamepadState[4]);
+int w4_gamepadRecorderSerialize (const w4_GamepadRecorder* recorder, uint8_t* dest, int maxSize);
+int w4_gamepadRecorderDeserialize (w4_GamepadRecorder* recorder, const uint8_t* src, int size);
+void w4_gamepadRecorderExportToFile (const w4_GamepadRecorder* recorder, const char* filename);
+int w4_gamepadRecorderLoadFromFile (w4_GamepadRecorder* recorder, const char* filename);
+
+// Memory structure definition
+#pragma pack(1)
+typedef struct {
+    uint8_t _padding[4];
+    uint32_t palette[4];
+    uint8_t drawColors[2];
+    uint8_t gamepads[4];
+    int16_t mouseX;
+    int16_t mouseY;
+    uint8_t mouseButtons;
+    uint8_t systemFlags;
+    uint8_t _reserved[128];
+    uint8_t framebuffer[160*160>>2];
+    uint8_t _user[58976];
+} Memory;
+#pragma pack()
+
+// Global variable declarations
+extern w4_GamepadRecorder gamepadRecorder;
+extern Memory* memory;
+extern w4_Disk* disk;

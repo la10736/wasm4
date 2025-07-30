@@ -1,9 +1,12 @@
 #include <MiniFB.h>
 #include <stdio.h>
 #include <time.h>
+#include <string.h>
 
 #include "../window.h"
 #include "../runtime.h"
+
+
 
 static uint32_t pixels[160*160];
 
@@ -32,6 +35,69 @@ void w4_windowBoot (const char* title) {
     do {
         // Keyboard handling
         const uint8_t* keyBuffer = mfb_get_key_buffer(window);
+        
+        // Handle hotkeys (F4-F8)
+        static uint8_t prevKeyState[KB_KEY_LAST] = {0};
+        
+        // F4 - Start/Stop Recording
+        if (keyBuffer[KB_KEY_F4] && !prevKeyState[KB_KEY_F4]) {
+            if (gamepadRecorder.isRecording) {
+                w4_gamepadRecorderStopRecording(&gamepadRecorder);
+            } else {
+                // Reset runtime and start recording
+                w4_runtimeReset();
+                w4_gamepadRecorderStartRecording(&gamepadRecorder);
+                printf("Runtime restarted - Gamepad recording started\n");
+            }
+        }
+        
+        // F5 - Export Events
+        if (keyBuffer[KB_KEY_F5] && !prevKeyState[KB_KEY_F5]) {
+            if (gamepadRecorder.eventCount > 0) {
+                char filename[64];
+                snprintf(filename, sizeof(filename), "gamepad-events-%ld.bin", time(NULL));
+                w4_gamepadRecorderExportToFile(&gamepadRecorder, filename);
+            } else {
+                printf("No gamepad events to export\n");
+            }
+        }
+        
+        // F6 - Show Status
+        if (keyBuffer[KB_KEY_F6] && !prevKeyState[KB_KEY_F6]) {
+            const char* status = gamepadRecorder.isRecording ? "Recording" : 
+                               gamepadRecorder.isPlaying ? "Playing" : "Stopped";
+            printf("Gamepad Status: %s | Frame: %u | Events: %u\n", 
+                   status, gamepadRecorder.currentFrame, gamepadRecorder.eventCount);
+        }
+        
+        // F7 - Load and Replay
+        if (keyBuffer[KB_KEY_F7] && !prevKeyState[KB_KEY_F7]) {
+            if (gamepadRecorder.isPlaying) {
+                w4_gamepadRecorderStopPlayback(&gamepadRecorder);
+            } else {
+                printf("Loading gamepad-events.bin...\n");
+                char filename[256] = "gamepad-events.bin";
+                // For simplicity, use a default filename in this implementation
+                if (w4_gamepadRecorderLoadFromFile(&gamepadRecorder, filename) == 0) {
+                    // Reset runtime for playback
+                    w4_runtimeReset();
+                    printf("Runtime restarted - Gamepad playback started\n");
+                }
+            }
+        }
+        
+        // F8 - Show Help
+        if (keyBuffer[KB_KEY_F8] && !prevKeyState[KB_KEY_F8]) {
+            printf("\n🎮 WASM-4 MiniFB Runtime Hotkeys:\n");
+            printf("F4 - Start/Stop Gamepad Recording (restarts runtime)\n");
+            printf("F5 - Export Gamepad Events to file\n");
+            printf("F6 - Show Recording Status\n");
+            printf("F7 - Load & Replay Events from file (restarts runtime)\n");
+            printf("F8 - Show This Help\n\n");
+        }
+        
+        // Update previous key state
+        memcpy(prevKeyState, keyBuffer, KB_KEY_LAST);
 
         // Player 1
         uint8_t gamepad = 0;
@@ -76,6 +142,24 @@ void w4_windowBoot (const char* title) {
             gamepad |= W4_BUTTON_DOWN;
         }
         w4_runtimeSetGamepad(1, gamepad);
+
+        // Collect gamepad states for recording
+        uint8_t currentGamepadState[4];
+        memcpy(currentGamepadState, memory->gamepads, 4);
+        
+        // Use playback events if playing, otherwise use real input
+        if (gamepadRecorder.isPlaying) {
+            uint8_t playbackState[4];
+            w4_gamepadRecorderGetPlaybackState(&gamepadRecorder, playbackState);
+            // Override the gamepad states with playback data
+            w4_runtimeSetGamepad(0, playbackState[0]);
+            w4_runtimeSetGamepad(1, playbackState[1]);
+            w4_runtimeSetGamepad(2, playbackState[2]);
+            w4_runtimeSetGamepad(3, playbackState[3]);
+        } else {
+            // Record gamepad events for this frame only when not playing back
+            w4_gamepadRecorderRecordFrame(&gamepadRecorder, currentGamepadState);
+        }
 
         // Mouse handling
         uint8_t mouseButtons = 0;
