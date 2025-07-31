@@ -1,4 +1,5 @@
 #include "runtime.h"
+#include <stdbool.h>
 
 #include <inttypes.h>
 #include <stdio.h>
@@ -301,14 +302,16 @@ void w4_runtimeTracef (const uint8_t* str, const void* stack) {
     putc('\n', stdout);
 }
 
-void w4_runtimeUpdate () {
+bool w4_runtimeUpdate () {
     if (firstFrame) {
         firstFrame = false;
         w4_wasmCallStart();
     } else if (!(memory->systemFlags & SYSTEM_PRESERVE_FRAMEBUFFER)) {
         w4_framebufferClear();
     }
-    w4_wasmCallUpdate();
+    if (!w4_wasmCallUpdate()) {
+        return false;
+    }
     w4_apuTick();
     uint32_t palette[4] = {
         w4_read32LE(&memory->palette[0]),
@@ -317,6 +320,8 @@ void w4_runtimeUpdate () {
         w4_read32LE(&memory->palette[3]),
     };
     w4_windowComposite(palette, memory->framebuffer);
+
+    return true;
 }
 
 int w4_runtimeSerializeSize () {

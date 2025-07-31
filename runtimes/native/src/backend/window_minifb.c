@@ -179,7 +179,9 @@ void w4_windowBoot (const char* title) {
         int mouseY = mfb_get_mouse_y(window);
         w4_runtimeSetMouse(160*(mouseX-viewportX)/viewportSize, 160*(mouseY-viewportY)/viewportSize, mouseButtons);
 
-        w4_runtimeUpdate();
+        if (!w4_runtimeUpdate()) {
+            break;
+        }
 
         if (mfb_update_ex(window, pixels, 160, 160) < 0) {
             break;

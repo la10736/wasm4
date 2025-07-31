@@ -251,8 +251,14 @@ void w4_wasmCallStart () {
     }
 }
 
-void w4_wasmCallUpdate () {
+bool w4_wasmCallUpdate () {
     if (update) {
         check(m3_CallV(update));
+
+        int32_t result = 0;
+        check(m3_GetResultsV(update, &result));
+        return result != 0;
     }
+
+    return true;
 }
