@@ -17,6 +17,15 @@
 #define W4_MOUSE_MIDDLE 4
 
 typedef struct {
+    uint32_t game_mode;
+    uint32_t max_frames;
+    uint32_t game_seed;
+    uint32_t frames;
+    uint32_t score;
+    uint32_t health;
+} w4_PersistentData;
+
+typedef struct {
     uint16_t size;
     uint8_t data[1024];
 } w4_Disk;
@@ -118,7 +127,7 @@ typedef struct {
     uint8_t mouseButtons;
     uint8_t systemFlags;
     uint8_t _reserved[128];
-    uint8_t persistent[256];  // Persistent area for cart data (scores, settings, etc.)
+    w4_PersistentData persistent;  // Persistent area for cart data (scores, settings, etc.)
     uint8_t framebuffer[160*160>>2];
     uint8_t _user[58720];     // Reduced by 256 bytes to accommodate persistent area
 } Memory;

@@ -1,6 +1,8 @@
 import * as constants from "./constants";
 import * as z85 from "./z85";
 import { APU } from "./apu";
+import { State } from "./state";
+import { PersistentData } from "./persistent-data";
 import { Framebuffer } from "./framebuffer";
 import { WebGLCompositor } from "./compositor";
 import * as devkit from "./devkit";
@@ -23,6 +25,7 @@ export class Runtime {
     diskName: string;
     diskBuffer: ArrayBuffer;
     diskSize: number;
+    persistentData: PersistentData;
 
     constructor (diskName: string) {
         const canvas = document.createElement("canvas");
@@ -57,6 +60,8 @@ export class Runtime {
         this.diskSize = (str != null)
             ? z85.decode(str, new Uint8Array(this.diskBuffer))
             : 0;
+
+        this.persistentData = new PersistentData(this.diskBuffer);
 
         this.memory = new WebAssembly.Memory({initial: 1, maximum: 1});
         this.data = new DataView(this.memory.buffer);
@@ -174,17 +179,17 @@ export class Runtime {
         });
     }
 
-    async bluescreenOnError (fn: Function) {
+    bluescreenOnError (fn: Function): any {
         try {
-            await fn();
+            return fn();
         } catch (err) {
             if (err instanceof Error) {
-                const errorExplanation = errorToBlueScreenText(err);
-                this.blueScreen(errorExplanation);
-                this.printToServer(err.stack ?? '');
+                this.printToServer(err.stack ?? err.message);
+                this.blueScreen(errorToBlueScreenText(err));
+            } else {
+                throw err;
             }
-
-            throw err;
+            return 0; // Stop execution on error
         }
     }
 
@@ -328,20 +333,24 @@ export class Runtime {
         }
     }
 
-    update () {
+    update (): boolean {
         if (this.pauseState != 0) {
-            return;
+            return true; // Continue running while paused
         }
 
         if (!this.getSystemFlag(constants.SYSTEM_PRESERVE_FRAMEBUFFER)) {
             this.framebuffer.clear();
         }
 
-        let update_function = this.wasm!.exports["update"];
+        const update_function = this.wasm!.exports["update"];
         if (typeof update_function === "function") {
-            this.bluescreenOnError(update_function);
+            const result = this.bluescreenOnError(update_function);
+            this.apu.tick();
+            return result !== 0; // 0 means stop
         }
+
         this.apu.tick();
+        return true; // Continue running if no update function
     }
 
     blueScreen (text: string) {

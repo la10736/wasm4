@@ -102,7 +102,7 @@ void w4_runtimeInit (uint8_t* memoryBytes, w4_Disk* diskBytes) {
     w4_write16LE(&memory->mouseY, 0x7fff);
 
     // Initialize gamepad recorder
-    w4_gamepadRecorderInit(&gamepadRecorder);
+
 
     w4_apuInit();
     w4_framebufferInit(memory->drawColors, memory->framebuffer);

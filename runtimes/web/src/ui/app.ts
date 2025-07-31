@@ -310,6 +310,8 @@ export class App extends LitElement {
     @state() private showMenu = false;
 
     @query("wasm4-menu-overlay") private menuOverlay?: MenuOverlay;
+
+    private requestAnimationFrameId: number | null = null;
     @query("wasm4-notifications") private notifications!: Notifications;
 
     private savedGameState?: State;
@@ -722,7 +724,7 @@ export class App extends LitElement {
         let lastTimeFrameStart = timeNextUpdate;
 
         const onFrame = (timeFrameStart: number) => {
-            requestAnimationFrame(onFrame);
+            this.requestAnimationFrameId = requestAnimationFrame(onFrame);
 
             pollPhysicalGamepads();
             let input = this.inputState;
@@ -748,7 +750,6 @@ export class App extends LitElement {
 
             while (timeFrameStart >= timeNextUpdate) {
                 timeNextUpdate += 1000/10;
-                console.log("Update");
 
                 // Use playback events if playing, otherwise use real input
                 let gamepadToUse = input.gamepad;
@@ -770,7 +771,14 @@ export class App extends LitElement {
                         runtime.setGamepad(playerIdx, gamepadToUse[playerIdx]);
                     }
                     runtime.setMouse(input.mouseX, input.mouseY, input.mouseButtons);
-                    runtime.update();
+                    const continueRunning = runtime.update();
+                    if (!continueRunning) {
+                        if (this.requestAnimationFrameId) {
+                            cancelAnimationFrame(this.requestAnimationFrameId);
+                        }
+                        this.notifications.show("Cart exited.");
+                        return;
+                    }
                     calledUpdate = true;
                 }
             }

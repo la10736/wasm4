@@ -41,18 +41,7 @@ void w4_windowBoot (const char* title) {
         // Handle hotkeys (F4-F8)
         static uint8_t prevKeyState[KB_KEY_LAST] = {0};
         
-        // F4 - Start/Stop Recording
-        if (keyBuffer[KB_KEY_F4] && !prevKeyState[KB_KEY_F4]) {
-            if (gamepadRecorder.isRecording) {
-                w4_gamepadRecorderStopRecording(&gamepadRecorder);
-            } else {
-                // Reset runtime and start recording
-                w4_runtimeReset();
-                w4_gamepadRecorderStartRecording(&gamepadRecorder);
-                printf("Runtime restarted - Gamepad recording started\n");
-            }
-        }
-        
+
         // F5 - Export Events
         if (keyBuffer[KB_KEY_F5] && !prevKeyState[KB_KEY_F5]) {
             if (gamepadRecorder.eventCount > 0) {
@@ -150,6 +139,7 @@ void w4_windowBoot (const char* title) {
         memcpy(currentGamepadState, memory->gamepads, 4);
         
         // Use playback events if playing, otherwise use real input
+
         if (gamepadRecorder.isPlaying) {
             uint8_t playbackState[4];
             w4_gamepadRecorderGetPlaybackState(&gamepadRecorder, playbackState);

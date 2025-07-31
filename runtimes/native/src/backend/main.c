@@ -1,8 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <cubeb/cubeb.h>
+
 
 #include "../apu.h"
 #include "../runtime.h"
@@ -206,9 +208,38 @@ int main (int argc, const char* argv[]) {
     uint8_t* memory = w4_wasmInit();
     w4_runtimeInit(memory, &disk);
 
+    w4_gamepadRecorderInit(&gamepadRecorder);
+    w4_gamepadRecorderStartRecording(&gamepadRecorder);
+
+    ((Memory*)memory)->persistent.game_mode = 1;
+    ((Memory*)memory)->persistent.max_frames = 600;
+    
+    struct timespec spec;
+    clock_gettime(CLOCK_REALTIME, &spec);
+    uint64_t ms = (uint64_t)spec.tv_sec * 1000 + (uint64_t)spec.tv_nsec / 1000000;
+    ((Memory*)memory)->persistent.game_seed = (uint32_t)ms;
+
+    printf("Starting in recording mode with seed: %u\n", ((Memory*)memory)->persistent.game_seed);
+
     w4_wasmLoadModule(cartBytes, cartLength);
 
     w4_windowBoot(title);
+
+    if (gamepadRecorder.eventCount > 0) {
+        char filename[64];
+        snprintf(filename, sizeof(filename), "gamepad-events-%u.bin", ((Memory*)memory)->persistent.game_seed);
+        w4_gamepadRecorderExportToFile(&gamepadRecorder, filename);
+        printf("Saved %u gamepad events to %s\n", gamepadRecorder.eventCount, filename);
+    }
+
+    printf("--- Persistent Data ---\n");
+    printf("Game Mode:  %u\n", ((Memory*)memory)->persistent.game_mode);
+    printf("Max Frames: %u\n", ((Memory*)memory)->persistent.max_frames);
+    printf("Game Seed:  %u\n", ((Memory*)memory)->persistent.game_seed);
+    printf("Frames:     %u\n", ((Memory*)memory)->persistent.frames);
+    printf("Score:      %u\n", ((Memory*)memory)->persistent.score);
+    printf("Health:     %u\n", ((Memory*)memory)->persistent.health);
+    printf("-----------------------\n");
 
     audioUninit();
 
