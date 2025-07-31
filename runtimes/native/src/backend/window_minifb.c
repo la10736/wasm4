@@ -28,9 +28,11 @@ void w4_windowBoot (const char* title) {
     mfb_set_resize_callback(window, onResize);
     
     // Target 15 FPS (66.67ms per frame)
-    const double targetFrameTime = 1.0 / 6.0;
+    const double targetFrameTime = 1.0 / 10.0;
     struct timespec lastTime, currentTime;
     clock_gettime(CLOCK_MONOTONIC, &lastTime);
+    struct timespec statTime = lastTime;
+    long statFps = 0;
 
     do {
         // Keyboard handling
@@ -196,6 +198,18 @@ void w4_windowBoot (const char* title) {
             };
             nanosleep(&sleepSpec, NULL);
         }
+
+        clock_gettime(CLOCK_MONOTONIC, &currentTime);
+
+        statFps++;
+        double elapsedStat = (currentTime.tv_sec - statTime.tv_sec) + 
+                            (currentTime.tv_nsec - statTime.tv_nsec) / 1000000000.0;
+        if (elapsedStat >= 1.0) {
+            printf("FPS: %ld\n", statFps);
+            statTime = currentTime;
+            statFps = 0;
+        }
+
         
         lastTime = currentTime;
         

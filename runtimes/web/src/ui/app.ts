@@ -747,7 +747,7 @@ export class App extends LitElement {
             }
 
             while (timeFrameStart >= timeNextUpdate) {
-                timeNextUpdate += 1000/6;
+                timeNextUpdate += 1000/10;
                 console.log("Update");
 
                 // Use playback events if playing, otherwise use real input
