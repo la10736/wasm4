@@ -112,7 +112,7 @@ void w4_gamepadRecorderStopPlayback (w4_GamepadRecorder* recorder);
 void w4_gamepadRecorderGetPlaybackState (w4_GamepadRecorder* recorder, uint8_t gamepadState[4]);
 int w4_gamepadRecorderSerialize (const w4_GamepadRecorder* recorder, uint8_t* dest, int maxSize);
 int w4_gamepadRecorderDeserialize (w4_GamepadRecorder* recorder, const uint8_t* src, int size);
-void w4_gamepadRecorderExportToFile (const w4_GamepadRecorder* recorder, const char* filename);
+void w4_gamepadRecorderExportToFile(const w4_GamepadRecorder* recorder, const char* filename);
 int w4_gamepadRecorderLoadFromFile (w4_GamepadRecorder* recorder, const char* filename);
 
 // Memory structure definition

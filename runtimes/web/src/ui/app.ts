@@ -8,6 +8,7 @@ import * as utils from "./utils";
 import * as z85 from "../z85";
 import { Netplay, DEV_NETPLAY } from "../netplay";
 import { Runtime } from "../runtime";
+import { PersistentData } from "../persistent-data";
 import { State } from "../state";
 
 import { MenuOverlay } from "./menu-overlay";
@@ -234,20 +235,34 @@ class GamepadEventRecorder {
         return events;
     }
 
-    exportToFile() {
-        const data = this.serializeToByteStream();
-        const blob = new Blob([data], { type: 'application/octet-stream' });
+    exportToFile(persistentData: PersistentData) {
+        const byteStream = this.serializeToByteStream();
+        const encodedEvents = z85.encode(byteStream);
+
+        const exportData = {
+            persistentData: {
+                game_mode: persistentData.game_mode,
+                max_frames: persistentData.max_frames,
+                game_seed: persistentData.game_seed,
+                frames: persistentData.frames,
+                score: persistentData.score,
+                health: persistentData.health,
+            },
+            gamepadEvents: encodedEvents,
+        };
+
+        const jsonString = JSON.stringify(exportData, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
-        
         const a = document.createElement('a');
         a.href = url;
-        a.download = `gamepad-events-${Date.now()}.bin`;
+        a.download = `game-recording-${persistentData.game_seed}.json`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        
         URL.revokeObjectURL(url);
-        console.log(`Exported ${this.events.length} gamepad events to file`);
+
+        console.log(`Exported persistent data and ${this.events.length} events to ${a.download}`);
     }
 
     getRecordingSummary(): string {
@@ -344,6 +359,10 @@ export class App extends LitElement {
     }
 
     async init () {
+        this.runtime.persistentData.game_mode = 1;
+        this.runtime.persistentData.max_frames = 60 * 60 * 2; // 2 minutes
+        this.runtime.persistentData.game_seed = Date.now();
+
         async function loadCartWasm (): Promise<Uint8Array> {
             const cartJson = document.getElementById("wasm4-cart-json");
 
@@ -502,7 +521,7 @@ export class App extends LitElement {
 
             "F5": () => {
                 if (this.gamepadRecorder.getEvents().length > 0) {
-                    this.gamepadRecorder.exportToFile();
+                    this.gamepadRecorder.exportToFile(this.runtime.persistentData);
                     this.notifications.show("Gamepad events exported");
                 } else {
                     this.notifications.show("No gamepad events to export");
@@ -776,7 +795,7 @@ export class App extends LitElement {
                         // Save gamepad events and log persistent data on exit
                         if (this.gamepadRecorder.getEvents().length > 0) {
                             const filename = `gamepad-events-${runtime.persistentData.game_seed}.bin`;
-                            this.gamepadRecorder.exportToFile();
+                            this.gamepadRecorder.exportToFile(this.runtime.persistentData);
                             console.log(`Saved ${this.gamepadRecorder.getEvents().length} gamepad events to ${filename}`);
                         }
                         

@@ -3,6 +3,7 @@ import * as z85 from "./z85";
 import { APU } from "./apu";
 import { State } from "./state";
 import { PersistentData } from "./persistent-data";
+import { ADDR_PERSISTENT } from "./constants";
 import { Framebuffer } from "./framebuffer";
 import { WebGLCompositor } from "./compositor";
 import * as devkit from "./devkit";
@@ -61,10 +62,11 @@ export class Runtime {
             ? z85.decode(str, new Uint8Array(this.diskBuffer))
             : 0;
 
-        this.persistentData = new PersistentData(this.diskBuffer);
-
         this.memory = new WebAssembly.Memory({initial: 1, maximum: 1});
+
         this.data = new DataView(this.memory.buffer);
+        this.persistentData = new PersistentData(this.data, ADDR_PERSISTENT);
+
 
         this.framebuffer = new Framebuffer(this.memory.buffer);
 
