@@ -11,6 +11,7 @@
 #include "util.h"
 #include "wasm.h"
 #include "window.h"
+#include "z85.h"
 
 #define WIDTH 160
 #define HEIGHT 160
@@ -571,4 +572,56 @@ int w4_gamepadRecorderLoadFromFile(w4_GamepadRecorder* recorder, const char* fil
     }
     
     return result;
+}
+
+void w4_gamepadRecorderExportToJSONFile(const w4_GamepadRecorder* recorder, const char* filename) {
+    FILE* file = fopen(filename, "w");
+    if (!file) {
+        printf("Failed to open file %s for writing\n", filename);
+        return;
+    }
+
+    // --- Persistent Data ---
+    fprintf(file, "{\n");
+    fprintf(file, "  \"persistent\": {\n");
+
+    uint8_t* persistent_base = ((uint8_t*)memory) + 0xa0;
+    fprintf(file, "    \"game_mode\": %u,\n", w4_read32LE(persistent_base + 0));
+    fprintf(file, "    \"max_frames\": %u,\n", w4_read32LE(persistent_base + 4));
+    fprintf(file, "    \"game_seed\": %u,\n", w4_read32LE(persistent_base + 8));
+    fprintf(file, "    \"frames\": %u,\n", w4_read32LE(persistent_base + 12));
+    fprintf(file, "    \"score\": %u,\n", w4_read32LE(persistent_base + 16));
+    fprintf(file, "    \"health\": %u\n", w4_read32LE(persistent_base + 20));
+
+    fprintf(file, "  },\n");
+
+    // --- Gamepad Events ---
+    // Encode events to z85
+    size_t eventsSize = recorder->eventCount * sizeof(w4_GamepadEvent);
+    size_t remainder = eventsSize % 4;
+    size_t paddedSize = eventsSize + (remainder == 0 ? 0 : 4 - remainder);
+
+    if (paddedSize > 0) {
+        uint8_t* paddedEvents = (uint8_t*)malloc(paddedSize);
+        memcpy(paddedEvents, recorder->events, eventsSize);
+        if (remainder != 0) {
+            memset(paddedEvents + eventsSize, 0, 4 - remainder);
+        }
+
+        size_t encodedSize = Z85_encode_bound(paddedSize);
+        char* encodedEvents = (char*)malloc(encodedSize + 1);
+        Z85_encode((char*)paddedEvents, encodedEvents, paddedSize);
+        encodedEvents[encodedSize] = '\0';
+
+        fprintf(file, "  \"events\": \"%s\"\n", encodedEvents);
+
+        free(encodedEvents);
+        free(paddedEvents);
+    } else {
+        fprintf(file, "  \"events\": \"\"\n");
+    }
+    fprintf(file, "}\n");
+
+    fclose(file);
+    printf("Exported persistent data and %u gamepad events to %s\n", recorder->eventCount, filename);
 }

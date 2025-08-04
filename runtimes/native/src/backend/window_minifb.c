@@ -44,12 +44,24 @@ void w4_windowBoot (const char* title) {
 
         // F5 - Export Events
         if (keyBuffer[KB_KEY_F5] && !prevKeyState[KB_KEY_F5]) {
-            if (gamepadRecorder.eventCount > 0) {
-                char filename[64];
-                snprintf(filename, sizeof(filename), "gamepad-events-%ld.bin", time(NULL));
-                w4_gamepadRecorderExportToFile(&gamepadRecorder, filename);
+            if (keyBuffer[KB_KEY_LEFT_SHIFT] || keyBuffer[KB_KEY_RIGHT_SHIFT]) {
+                // Export as JSON
+                if (gamepadRecorder.eventCount > 0) {
+                    char filename[64];
+                    snprintf(filename, sizeof(filename), "gamepad-events-%ld.json", time(NULL));
+                    w4_gamepadRecorderExportToJSONFile(&gamepadRecorder, filename);
+                } else {
+                    printf("No gamepad events to export\n");
+                }
             } else {
-                printf("No gamepad events to export\n");
+                // Export as binary
+                if (gamepadRecorder.eventCount > 0) {
+                    char filename[64];
+                    snprintf(filename, sizeof(filename), "gamepad-events-%ld.bin", time(NULL));
+                    w4_gamepadRecorderExportToFile(&gamepadRecorder, filename);
+                } else {
+                    printf("No gamepad events to export\n");
+                }
             }
         }
         
@@ -81,7 +93,8 @@ void w4_windowBoot (const char* title) {
         if (keyBuffer[KB_KEY_F8] && !prevKeyState[KB_KEY_F8]) {
             printf("\n🎮 WASM-4 MiniFB Runtime Hotkeys:\n");
             printf("F4 - Start/Stop Gamepad Recording (restarts runtime)\n");
-            printf("F5 - Export Gamepad Events to file\n");
+            printf("F5 - Export Gamepad Events to file (binary)\n");
+            printf("Shift+F5 - Export Gamepad Events to file (JSON)\n");
             printf("F6 - Show Recording Status\n");
             printf("F7 - Load & Replay Events from file (restarts runtime)\n");
             printf("F8 - Show This Help\n\n");
@@ -206,6 +219,20 @@ void w4_windowBoot (const char* title) {
         lastTime = currentTime;
         
     } while (mfb_wait_sync(window));
+
+    // Save recordings on exit
+    if (gamepadRecorder.eventCount > 0) {
+        char basename[64];
+        snprintf(basename, sizeof(basename), "gamepad-events-%ld", time(NULL));
+
+        char binFilename[70];
+        snprintf(binFilename, sizeof(binFilename), "%s.bin", basename);
+        w4_gamepadRecorderExportToFile(&gamepadRecorder, binFilename);
+
+        char jsonFilename[71];
+        snprintf(jsonFilename, sizeof(jsonFilename), "%s.json", basename);
+        w4_gamepadRecorderExportToJSONFile(&gamepadRecorder, jsonFilename);
+    }
 }
 
 void w4_windowComposite (const uint32_t* palette, const uint8_t* framebuffer) {
