@@ -397,6 +397,15 @@ export class App extends LitElement {
             runtime.start();
         }
 
+        // Initialize persistent data for recording mode
+        runtime.persistentData.game_mode = 1;
+        runtime.persistentData.max_frames = 600;
+        runtime.persistentData.game_seed = Date.now() & 0xFFFFFFFF; // Use current time as seed
+        
+        // Start recording automatically
+        this.gamepadRecorder.startRecording();
+        console.log(`Starting in recording mode with seed: ${runtime.persistentData.game_seed}`);
+
         if (DEV_NETPLAY) {
             this.copyNetplayLink();
         }
@@ -490,20 +499,7 @@ export class App extends LitElement {
             "F1": () => this.onMenuButtonPressed(),
             "F2": () => takeScreenshot(),
             "F3": () => recordVideo(),
-            "F4": () => {
-                if (this.gamepadRecorder.isRecordingActive) {
-                    this.gamepadRecorder.stopRecording();
-                    this.notifications.show("Gamepad recording stopped");
-                } else {
-                    // Restart runtime when starting recording to not lose any frames
-                    this.resetCart(undefined, false).then(() => {
-                        this.gamepadRecorder.startRecording();
-                        this.notifications.show("Runtime restarted - Gamepad recording started");
-                    }).catch(() => {
-                        this.notifications.show("Failed to restart runtime");
-                    });
-                }
-            },
+
             "F5": () => {
                 if (this.gamepadRecorder.getEvents().length > 0) {
                     this.gamepadRecorder.exportToFile();
@@ -776,6 +772,23 @@ export class App extends LitElement {
                         if (this.requestAnimationFrameId) {
                             cancelAnimationFrame(this.requestAnimationFrameId);
                         }
+                        
+                        // Save gamepad events and log persistent data on exit
+                        if (this.gamepadRecorder.getEvents().length > 0) {
+                            const filename = `gamepad-events-${runtime.persistentData.game_seed}.bin`;
+                            this.gamepadRecorder.exportToFile();
+                            console.log(`Saved ${this.gamepadRecorder.getEvents().length} gamepad events to ${filename}`);
+                        }
+                        
+                        console.log("--- Persistent Data ---");
+                        console.log(`Game Mode:  ${runtime.persistentData.game_mode}`);
+                        console.log(`Max Frames: ${runtime.persistentData.max_frames}`);
+                        console.log(`Game Seed:  ${runtime.persistentData.game_seed}`);
+                        console.log(`Frames:     ${runtime.persistentData.frames}`);
+                        console.log(`Score:      ${runtime.persistentData.score}`);
+                        console.log(`Health:     ${runtime.persistentData.health}`);
+                        console.log("-----------------------");
+                        
                         this.notifications.show("Cart exited.");
                         return;
                     }
