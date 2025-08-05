@@ -1,3 +1,5 @@
+import { EventEmitter } from 'events';
+
 export interface User {
     address: string;
     nonce: number;
@@ -16,9 +18,12 @@ export interface LeaderboardEntry {
 }
 
 export interface IRepository {
+    emitter: EventEmitter;
     getUser(address: string): Promise<User | undefined>;
     getOrCreateUser(address: string): Promise<User>;
     updateUserNonce(address: string): Promise<User>;
     addLeaderboardEntry(entry: Omit<LeaderboardEntry, 'id' | 'createdAt' | 'proofState'>): Promise<LeaderboardEntry>;
     getLeaderboard(page: number, limit: number): Promise<{ total: number; data: LeaderboardEntry[] }>;
+    getLeaderboardEntry(id: string): Promise<{ entry: LeaderboardEntry; position: number } | undefined>;
+    updateLeaderboardEntry(id: string, updates: Partial<Omit<LeaderboardEntry, 'id'>>): Promise<LeaderboardEntry | undefined>;
 }

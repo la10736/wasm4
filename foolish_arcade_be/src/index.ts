@@ -97,6 +97,43 @@ export function createApp(repository: IRepository) {
     });
 
     // 3. Get leaderboard
+    // 4. Subscribe to leaderboard entry changes
+    app.get('/leaderboard/subscribe/:id', async (req: Request, res: Response) => {
+        const { id } = req.params;
+
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.flushHeaders();
+
+        const sendUpdate = (data: any) => {
+            res.write(`data: ${JSON.stringify(data)}\n\n`);
+        };
+
+        const onUpdate = (data: { entry: LeaderboardEntry, position: number }) => {
+            if (data.entry.id === id) {
+                sendUpdate(data);
+            }
+        };
+
+        // Immediately send the current state
+        try {
+            const initialState = await repository.getLeaderboardEntry(id);
+            if (initialState) {
+                sendUpdate(initialState);
+            }
+        } catch (error) {
+            console.error('Failed to get initial state for subscription', error);
+        }
+
+        repository.emitter.on('update', onUpdate);
+
+        req.on('close', () => {
+            repository.emitter.off('update', onUpdate);
+            res.end();
+        });
+    });
+
     app.get('/leaderboard', async (req: Request, res: Response) => {
         const page = parseInt(req.query.page as string) || 1;
         const limit = parseInt(req.query.limit as string) || 10;
