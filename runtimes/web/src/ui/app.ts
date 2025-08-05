@@ -339,6 +339,8 @@ export class App extends LitElement {
 
     private readonly diskPrefix: string;
 
+    @state() private onExit: ((data: { persistentData: PersistentData, events: GamepadEvent[] }) => void) | null = null;
+
     readonly onPointerUp = (event: PointerEvent) => {
         if (event.pointerType == "touch") {
             // Try to go fullscreen on mobile
@@ -1049,6 +1051,10 @@ export class App extends LitElement {
         window.removeEventListener("pointerup", this.onPointerUp);
 
         super.disconnectedCallback();
+    }
+
+    setOnExit(callback: (data: { persistentData: PersistentData, events: GamepadEvent[] }) => void) {
+        this.onExit = callback;
     }
 
     render () {
