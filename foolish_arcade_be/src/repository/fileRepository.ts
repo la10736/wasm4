@@ -1,4 +1,5 @@
 import { promises as fs } from 'fs';
+import { randomUUID } from 'crypto';
 import path from 'path';
 import { IRepository, User, LeaderboardEntry } from './types';
 
@@ -65,11 +66,18 @@ export class FileRepository implements IRepository {
         return user;
     }
 
-    async addLeaderboardEntry(entry: LeaderboardEntry): Promise<void> {
+    async addLeaderboardEntry(entry: Omit<LeaderboardEntry, 'id' | 'createdAt' | 'proofState'>): Promise<LeaderboardEntry> {
         await this.initialization;
-        this.data.leaderboard.push(entry);
+        const newEntry: LeaderboardEntry = {
+            id: randomUUID(),
+            ...entry,
+            createdAt: new Date().toISOString(),
+            proofState: 'inserted',
+        };
+        this.data.leaderboard.push(newEntry);
         this.data.leaderboard.sort((a, b) => b.score - a.score);
         await this.saveData();
+        return newEntry;
     }
 
     async getLeaderboard(page: number, limit: number): Promise<{ total: number; data: LeaderboardEntry[]; }> {

@@ -3,17 +3,22 @@ export interface User {
     nonce: number;
 }
 
+export type ProofState = 'inserted' | 'proving' | 'proved' | 'failed';
+
 export interface LeaderboardEntry {
+    id: string;
     user: string;
     score: number;
     time: number;
     health: number;
+    createdAt: string; // ISO 8601 format
+    proofState: ProofState;
 }
 
 export interface IRepository {
     getUser(address: string): Promise<User | undefined>;
     getOrCreateUser(address: string): Promise<User>;
     updateUserNonce(address: string): Promise<User>;
-    addLeaderboardEntry(entry: LeaderboardEntry): Promise<void>;
+    addLeaderboardEntry(entry: Omit<LeaderboardEntry, 'id' | 'createdAt' | 'proofState'>): Promise<LeaderboardEntry>;
     getLeaderboard(page: number, limit: number): Promise<{ total: number; data: LeaderboardEntry[] }>;
 }

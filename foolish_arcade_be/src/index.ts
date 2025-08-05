@@ -75,22 +75,22 @@ export function createApp(repository: IRepository) {
 
     // 2. Submit a game result
     app.post('/submit_game', authenticateToken, async (req: Request, res: Response) => {
-        const { gameData } = req.body;
+        const { score, time, health } = req.body;
         const user = (req as any).user;
 
-        if (!gameData || gameData.score === undefined || gameData.time === undefined || gameData.health === undefined) {
+        if (score === undefined || time === undefined || health === undefined) {
             return res.status(400).json({ error: 'Game data must include score, time, and health' });
         }
 
         try {
-            const newEntry: LeaderboardEntry = {
+            const entryData = {
                 user: user.address,
-                score: gameData.score,
-                time: gameData.time,
-                health: gameData.health,
+                score: score,
+                time: time,
+                health: health,
             };
-            await repository.addLeaderboardEntry(newEntry);
-            res.json({ message: 'Game data submitted successfully' });
+            const newEntry = await repository.addLeaderboardEntry(entryData);
+            res.json({ message: 'Game data submitted successfully', entryId: newEntry.id });
         } catch (error) {
             res.status(500).json({ error: 'Internal server error' });
         }

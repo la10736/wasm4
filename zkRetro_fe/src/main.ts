@@ -13,6 +13,8 @@ const gameView = document.getElementById('game-view')!;
 const leaderboardContainer = document.getElementById('leaderboard-container')!;
 const leaderboardBody = document.getElementById('leaderboard-body')! as HTMLTableSectionElement;
 const playAgainButton = document.getElementById('play-again-button')! as HTMLButtonElement;
+
+const shortenAddress = (address: string) => `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
 const walletStatusDiv = document.getElementById('wallet-status') as HTMLDivElement;
 
 // Web3-Onboard Initialization
@@ -91,14 +93,18 @@ async function handleLogin(wallet: any) {
     }
 }
 
-function updateUI(wallet: any | null) {
+async function updateUI(wallet: any | null) {
     if (wallet) {
-        const address = wallet.accounts[0].address;
-        const ensName = wallet.accounts[0].ens?.name;
-        const name = ensName || wallet.label;
-        const displayName = `${name} - ${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+        const account = wallet.accounts[0];
+        const address = account.address;
+        let name = account.ens?.name ?? wallet.label;
 
-        walletStatusDiv.textContent = `Connected: ${displayName}`;
+        // The ENS name might be a promise that resolves later or fails.
+        // We don't await it here to keep the UI responsive.
+        // Instead, we let web3-onboard update it in the background.
+        // The main goal is to prevent the timeout from crashing the UI.
+
+        walletStatusDiv.textContent = `Connected: ${name} - ${shortenAddress(address)}`;
         connectButton.style.display = 'none';
         disconnectButton.style.display = 'block';
         startButton.style.display = 'block';
@@ -159,22 +165,38 @@ async function startGame() {
     }
 }
 
-async function submitGameData(gameData: any) {
+async function submitGameData(gameData: { persistentData: { view: DataView }, events: any[] }) {
     if (!jwtToken) {
-        console.error('No JWT token available for submission');
-        alert('Authentication error. Please log in again.');
+        console.error('No JWT token, cannot submit game data.');
         return;
     }
 
     console.log('Submitting game data to backend...');
     try {
+        // These offsets are defined in the WASM-4 runtime and must be kept in sync
+        const ADDR_PERSISTENT = 0xa0;
+        const OFFSET_SCORE = 4; // u32
+        const OFFSET_TIME = 8; // u32
+        const OFFSET_HEALTH = 12; // u32
+
+        const score = gameData.persistentData.view.getUint32(ADDR_PERSISTENT + OFFSET_SCORE, true);
+        const time = gameData.persistentData.view.getUint32(ADDR_PERSISTENT + OFFSET_TIME, true);
+        const health = gameData.persistentData.view.getUint32(ADDR_PERSISTENT + OFFSET_HEALTH, true);
+
+        const submissionPayload = {
+            score,
+            time,
+            health,
+            events: gameData.events,
+        };
+
         const response = await fetch('http://localhost:3000/submit_game', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${jwtToken}`
+                'Authorization': `Bearer ${jwtToken}`,
             },
-            body: JSON.stringify(gameData)
+            body: JSON.stringify(submissionPayload),
         });
 
         if (response.ok) {
@@ -186,9 +208,8 @@ async function submitGameData(gameData: any) {
             leaderboardContainer.style.display = 'block';
             await showLeaderboard();
         } else {
-            const errorText = await response.text();
-            console.error('Submission failed:', response.status, errorText);
-            alert(`Failed to submit game data: ${errorText}`);
+            const errorResult = await response.json();
+            console.error(`Submission failed: ${response.status}`, errorResult);
         }
     } catch (error) {
         console.error('Error submitting game data:', error);
