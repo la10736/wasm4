@@ -1,17 +1,4 @@
 {
-  "users": {
-    "0x7C118334c938ec095cd2358858fAD398dc32498b": {
-      "address": "0x7C118334c938ec095cd2358858fAD398dc32498b",
-      "nonce": 477063
-    },
-    "0x7c118334c938ec095cd2358858fad398dc32498b": {
-      "address": "0x7c118334c938ec095cd2358858fad398dc32498b",
-      "nonce": 830748
-    },
-    "0x3804ccdabe7fb330efb8439238dc1e1b91b5e6d5": {
-      "address": "0x3804ccdabe7fb330efb8439238dc1e1b91b5e6d5",
-      "nonce": 853130
-    }
-  },
+  "users": {},
   "leaderboard": []
 }

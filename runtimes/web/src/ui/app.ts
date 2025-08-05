@@ -14,6 +14,14 @@ import { State } from "../state";
 import { MenuOverlay } from "./menu-overlay";
 import { Notifications } from "./notifications";
 
+export interface RunOptions {
+    onExit?: (data: { persistentData: PersistentData, events: GamepadEvent[] }) => void;
+}
+
+export interface RunOptions {
+    onExit?: (data: { persistentData: PersistentData, events: GamepadEvent[] }) => void;
+}
+
 class InputState {
     gamepad = [0, 0, 0, 0];
     mouseX = 0;
@@ -329,6 +337,10 @@ export class App extends LitElement {
     private requestAnimationFrameId: number | null = null;
     @query("wasm4-notifications") private notifications!: Notifications;
 
+    @state() private onExit: ((data: { persistentData: PersistentData, events: GamepadEvent[] }) => void) | null = null;
+
+    @state() private onExit: ((data: { persistentData: PersistentData, events: GamepadEvent[] }) => void) | null = null;
+
     private savedGameState?: State;
 
     readonly inputState = new InputState();
@@ -359,6 +371,64 @@ export class App extends LitElement {
     }
 
     async init () {
+        this.runtime.persistentData.game_mode = 1;
+        this.runtime.persistentData.max_frames = 60 * 60 * 2; // 2 minutes
+        this.runtime.persistentData.game_seed = Date.now();
+
+        async function loadCartWasm (): Promise<Uint8Array> {
+            const cartJson = document.getElementById("wasm4-cart-json");
+
+            // Is cart inlined?
+            if (cartJson) {
+                const { WASM4_CART, WASM4_CART_SIZE } = JSON.parse(cartJson.textContent ?? '');
+
+                // The cart was bundled in the html, decode it
+                const buffer = new Uint8Array(WASM4_CART_SIZE);
+                z85.decode(WASM4_CART, buffer);
+                return buffer;
+
+            } else {
+                // Load the cart from a url
+                const cartUrl = utils.getUrlParam("url") ?? "cart.wasm";
+                const res = await fetch(cartUrl);
+                if (res.ok) {
+                    return new Uint8Array(await res.arrayBuffer());
+                } else {
+                    throw new Error(`Could not load cart at url: ${cartUrl}`);
+                }
+            }
+        }
+
+        const runtime = this.runtime;
+        await runtime.init();
+
+        const canvas = runtime.canvas;
+
+        const hostPeerId = utils.getUrlParam("netplay");
+        if (hostPeerId) {
+            this.netplay = this.createNetplay();
+            this.netplay.join(hostPeerId);
+        } else {
+            await runtime.load(await loadCartWasm());
+        }
+
+        // Finalize the init and start the game loop
+        this.run(runtime.wasmBuffer!, true);
+    }
+
+    run (cart: string | Uint8Array, isReload: boolean = false) {
+        this.stop();
+
+        const cartPromise = (typeof cart === "string")
+            ? fetch(cart).then(res => res.arrayBuffer()).then(buf => new Uint8Array(buf))
+            : Promise.resolve(cart);
+
+        cartPromise.then(wasmBuffer => {
+            this.resetCart(wasmBuffer, isReload).then(() => {
+                this.requestAnimationFrameId = requestAnimationFrame(this.onFrame);
+            });
+        });
+    }
         this.runtime.persistentData.game_mode = 1;
         this.runtime.persistentData.max_frames = 60 * 60 * 2; // 2 minutes
         this.runtime.persistentData.game_seed = Date.now();
@@ -733,17 +803,16 @@ export class App extends LitElement {
             }
         }
 
-        // When we should perform the next update
-        let timeNextUpdate = performance.now();
-        // Track the timestamp of the last frame
-        let lastTimeFrameStart = timeNextUpdate;
+        while (timeFrameStart >= timeNextUpdate) {
+            timeNextUpdate += 1000/10;
 
-        const onFrame = (timeFrameStart: number) => {
-            this.requestAnimationFrameId = requestAnimationFrame(onFrame);
-
-            pollPhysicalGamepads();
-            let input = this.inputState;
-
+            // Use playback events if playing, otherwise use real input
+            let gamepadToUse = input.gamepad;
+            if (this.gamepadRecorder.isPlayingActive) {
+                gamepadToUse = this.gamepadRecorder.getPlaybackGamepadState();
+            } else {
+                // Record gamepad events for this frame only when not playing back
+                this.gamepadRecorder.recordFrame(input.gamepad);
             if (this.menuOverlay != null) {
                 this.menuOverlay.applyInput();
 
@@ -1043,6 +1112,14 @@ export class App extends LitElement {
         super.connectedCallback();
 
         window.addEventListener("pointerup", this.onPointerUp);
+    }
+
+    setOnExit (callback: (data: { persistentData: PersistentData, events: GamepadEvent[] }) => void) {
+        this.onExit = callback;
+    }
+
+    setOnExit (callback: (data: { persistentData: PersistentData, events: GamepadEvent[] }) => void) {
+        this.onExit = callback;
     }
 
     disconnectedCallback () {

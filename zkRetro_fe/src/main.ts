@@ -3,6 +3,8 @@ import { ethers } from 'ethers';
 import Onboard from '@web3-onboard/core';
 import injectedModule from '@web3-onboard/injected-wallets';
 
+declare const wasm4: any;
+
 // UI Elements
 const connectButton = document.getElementById('connect-button') as HTMLButtonElement;
 const disconnectButton = document.getElementById('disconnect-button') as HTMLButtonElement;
@@ -125,7 +127,14 @@ startButton.addEventListener('click', () => {
         return;
     }
     console.log('Starting game with token:', jwtToken);
-    // Game start logic will go here
+
+    // Hide controls and show the game
+    walletStatusDiv.style.display = 'none';
+    disconnectButton.style.display = 'none';
+    startButton.style.display = 'none';
+
+    // Run the game
+    wasm4.run('/cart.wasm');
 });
 
 // Subscribe to wallet changes
