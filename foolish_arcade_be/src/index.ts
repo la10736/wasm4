@@ -97,7 +97,40 @@ export function createApp(repository: IRepository) {
     });
 
     // 3. Get leaderboard
-    // 4. Subscribe to leaderboard entry changes
+    // 4. Get leaderboard entry neighbours
+    app.get('/leaderboard/neighbors/:id', async (req: Request, res: Response) => {
+        const { id } = req.params;
+        const before = parseInt(req.query.before as string) || 5;
+        const after = parseInt(req.query.after as string) || 5;
+
+        try {
+            const neighbors = await repository.getLeaderboardEntryNeighbors(id, before, after);
+            if (!neighbors) {
+                return res.status(404).json({ error: 'Leaderboard entry not found' });
+            }
+            res.json(neighbors);
+        } catch (error) {
+            console.error('Failed to get leaderboard neighbors:', error);
+            res.status(500).json({ error: 'Failed to get leaderboard neighbors' });
+        }
+    });
+
+    app.get('/leaderboard/neighbors', async (req: Request, res: Response) => {
+        const before = parseInt(req.query.before as string) || 5;
+        const after = parseInt(req.query.after as string) || 5;
+        
+        try {
+            // If no ID, return top N entries
+            const limit = before + after + 1;
+            const leaderboard = await repository.getLeaderboard(1, limit);
+            res.json(leaderboard.data);
+        } catch (error) {
+            console.error('Failed to get leaderboard neighbors:', error);
+            res.status(500).json({ error: 'Failed to get leaderboard neighbors' });
+        }
+    });
+
+    // 5. Subscribe to leaderboard entry changes
     app.get('/leaderboard/subscribe/:id', async (req: Request, res: Response) => {
         const { id } = req.params;
 

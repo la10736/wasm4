@@ -50,6 +50,7 @@ const onboard = Onboard({
 let jwtToken: string | null = null;
 let loggedInAddress: string | null = null;
 let isLoggingIn: boolean = false;
+let activeSseConnections: EventSource[] = [];
 
 // --- Functions ---
 
@@ -206,7 +207,7 @@ async function submitGameData(gameData: { persistentData: { view: DataView }, ev
             document.body.classList.remove('game-active');
             gameView.style.display = 'none';
             leaderboardContainer.style.display = 'block';
-            await showLeaderboard();
+            await showLeaderboard(result.entryId);
         } else {
             const errorResult = await response.json();
             console.error(`Submission failed: ${response.status}`, errorResult);
@@ -242,31 +243,62 @@ playAgainButton.addEventListener('click', () => {
     leaderboardContainer.style.display = 'none';
     gameView.style.display = 'block';
     document.body.classList.remove('game-active');
+    // Close active SSE connections when leaving the leaderboard
+    activeSseConnections.forEach(conn => conn.close());
+    activeSseConnections = [];
 });
 
-async function showLeaderboard() {
-    console.log('Fetching leaderboard...');
+async function showLeaderboard(entryId?: string) {
+    const url = entryId 
+        ? `http://localhost:3000/leaderboard/neighbors/${entryId}` 
+        : 'http://localhost:3000/leaderboard/neighbors';
+
+    console.log(`Fetching leaderboard from ${url}`)
+
     try {
-        const response = await fetch('http://localhost:3000/get_leaderboard');
-        if (response.ok) {
-            const leaderboardData = await response.json();
-            leaderboardBody.innerHTML = ''; // Clear previous entries
-
-            leaderboardData.forEach((entry: any, index: number) => {
-                const row = leaderboardBody.insertRow();
-                row.innerHTML = `
-                    <td>${index + 1}</td>
-                    <td>${entry.user.substring(0, 6)}...${entry.user.substring(entry.user.length - 4)}</td>
-                    <td>${entry.score}</td>
-                    <td>${(entry.time / 60).toFixed(2)}s</td>
-                    <td>${entry.health}</td>
-                `;
-            });
-
-        } else {
-            console.error('Failed to fetch leaderboard');
-            alert('Could not load leaderboard data.');
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch leaderboard: ${response.statusText}`);
         }
+
+        const leaderboardData: { entry: any, position: number }[] = await response.json();
+
+        // Close any previous connections before creating new ones
+        activeSseConnections.forEach(conn => conn.close());
+        activeSseConnections = [];
+        leaderboardBody.innerHTML = ''; // Clear previous entries
+
+        leaderboardData.forEach(({ entry, position }) => {
+            const row = leaderboardBody.insertRow();
+            row.dataset.entryId = entry.id;
+            if (entry.id === entryId) {
+                row.classList.add('current-player');
+            }
+            row.innerHTML = `
+                <td class="position">${position}</td>
+                <td class="user">${shortenAddress(entry.user)}</td>
+                <td class="score">${entry.score}</td>
+                <td class="time">${(entry.time / 60).toFixed(2)}s</td>
+                <td class="health">${entry.health}</td>
+                <td class="proof-state">${entry.proofState}</td>
+            `;
+
+            // Subscribe to real-time updates for this entry
+            const sse = new EventSource(`http://localhost:3000/leaderboard/subscribe/${entry.id}`);
+            sse.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                const targetRow = leaderboardBody.querySelector(`[data-entry-id="${entry.id}"]`);
+                if (targetRow) {
+                    const proofStateCell = targetRow.querySelector('.proof-state');
+                    if (proofStateCell) proofStateCell.textContent = data.proofState;
+                    
+                    const positionCell = targetRow.querySelector('.position');
+                    if (positionCell && data.position) positionCell.textContent = data.position;
+                }
+            };
+            activeSseConnections.push(sse);
+        });
+
     } catch (error) {
         console.error('Error fetching leaderboard:', error);
         alert('An error occurred while fetching the leaderboard.');

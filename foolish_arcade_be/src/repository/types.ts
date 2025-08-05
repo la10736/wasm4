@@ -23,7 +23,8 @@ export interface IRepository {
     getOrCreateUser(address: string): Promise<User>;
     updateUserNonce(address: string): Promise<User>;
     addLeaderboardEntry(entry: Omit<LeaderboardEntry, 'id' | 'createdAt' | 'proofState'>): Promise<LeaderboardEntry>;
-    getLeaderboard(page: number, limit: number): Promise<{ total: number; data: LeaderboardEntry[] }>;
+    getLeaderboard(page: number, limit: number): Promise<{ total: number; data: { entry: LeaderboardEntry, position: number }[] }>;
     getLeaderboardEntry(id: string): Promise<{ entry: LeaderboardEntry; position: number } | undefined>;
-    updateLeaderboardEntry(id: string, updates: Partial<Omit<LeaderboardEntry, 'id'>>): Promise<LeaderboardEntry | undefined>;
+    updateLeaderboardEntry(id: string, updates: { proofState: ProofState }): Promise<LeaderboardEntry | undefined>;
+    getLeaderboardEntryNeighbors(id: string, before: number, after: number): Promise<{ entry: LeaderboardEntry, position: number }[] | undefined>;
 }

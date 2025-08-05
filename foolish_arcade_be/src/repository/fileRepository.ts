@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import { promises as fs } from 'fs';
 import { randomUUID } from 'crypto';
 import path from 'path';
-import { IRepository, User, LeaderboardEntry } from './types';
+import { IRepository, User, LeaderboardEntry, ProofState } from './types';
 
 const DB_PATH = path.join(__dirname, '../../db.json');
 
@@ -86,12 +86,16 @@ export class FileRepository implements IRepository {
         return newEntry;
     }
 
-    async getLeaderboard(page: number, limit: number): Promise<{ total: number; data: LeaderboardEntry[]; }> {
+    async getLeaderboard(page: number, limit: number): Promise<{ total: number; data: { entry: LeaderboardEntry, position: number }[] }> {
         await this.initialization;
         const startIndex = (page - 1) * limit;
         const endIndex = page * limit;
-        const data = this.data.leaderboard.slice(startIndex, endIndex);
-        return { total: this.data.leaderboard.length, data };
+        const slicedData = this.data.leaderboard.slice(startIndex, endIndex);
+        const dataWithPosition = slicedData.map((entry, index) => ({
+            entry,
+            position: startIndex + index + 1,
+        }));
+        return { total: this.data.leaderboard.length, data: dataWithPosition };
     }
 
     async getLeaderboardEntry(id: string): Promise<{ entry: LeaderboardEntry; position: number } | undefined> {
@@ -104,7 +108,7 @@ export class FileRepository implements IRepository {
         return { entry, position };
     }
 
-    async updateLeaderboardEntry(id: string, updates: Partial<Omit<LeaderboardEntry, 'id'>>): Promise<LeaderboardEntry | undefined> {
+    async updateLeaderboardEntry(id: string, updates: { proofState: ProofState }): Promise<LeaderboardEntry | undefined> {
         await this.initialization;
         const entryIndex = this.data.leaderboard.findIndex(e => e.id === id);
         if (entryIndex === -1) {
@@ -114,15 +118,41 @@ export class FileRepository implements IRepository {
         const updatedEntry = { ...this.data.leaderboard[entryIndex], ...updates };
         this.data.leaderboard[entryIndex] = updatedEntry;
 
-        if (updates.score !== undefined) {
-            this.data.leaderboard.sort((a, b) => b.score - a.score);
-        }
-
         await this.saveData();
 
-        const newPosition = this.data.leaderboard.findIndex(e => e.id === id) + 1;
-        this.emitter.emit('update', { entry: updatedEntry, position: newPosition });
+        // The position does not change when only the proofState is updated
+        const position = entryIndex + 1;
+        this.emitter.emit('update', { entry: updatedEntry, position: position });
 
         return updatedEntry;
+    }
+
+    async getLeaderboardEntryNeighbors(id: string, before: number, after: number): Promise<{ entry: LeaderboardEntry, position: number }[] | undefined> {
+        await this.initialization;
+        const targetIndex = this.data.leaderboard.findIndex(e => e.id === id);
+
+        if (targetIndex === -1) {
+            return undefined;
+        }
+
+        const totalEntries = this.data.leaderboard.length;
+        let startIndex = Math.max(0, targetIndex - before);
+        let endIndex = Math.min(totalEntries, targetIndex + after + 1);
+
+        const missingBefore = before - (targetIndex - startIndex);
+        if (missingBefore > 0) {
+            endIndex = Math.min(totalEntries, endIndex + missingBefore);
+        }
+
+        const missingAfter = after - (endIndex - (targetIndex + 1));
+        if (missingAfter > 0) {
+            startIndex = Math.max(0, startIndex - missingAfter);
+        }
+
+        const slicedData = this.data.leaderboard.slice(startIndex, endIndex);
+        return slicedData.map((entry, index) => ({
+            entry,
+            position: startIndex + index + 1,
+        }));
     }
 }
