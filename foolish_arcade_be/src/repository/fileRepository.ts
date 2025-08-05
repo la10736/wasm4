@@ -53,6 +53,18 @@ export class FileRepository implements IRepository {
         return user;
     }
 
+    async updateUserNonce(address: string): Promise<User> {
+        await this.initialization;
+        const user = this.data.users[address];
+        if (!user) {
+            throw new Error('User not found');
+        }
+        user.nonce = Math.floor(Math.random() * 1000000);
+        this.data.users[address] = user;
+        await this.saveData();
+        return user;
+    }
+
     async addLeaderboardEntry(entry: LeaderboardEntry): Promise<void> {
         await this.initialization;
         this.data.leaderboard.push(entry);

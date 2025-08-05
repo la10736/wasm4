@@ -13,6 +13,7 @@ export interface LeaderboardEntry {
 export interface IRepository {
     getUser(address: string): Promise<User | undefined>;
     getOrCreateUser(address: string): Promise<User>;
+    updateUserNonce(address: string): Promise<User>;
     addLeaderboardEntry(entry: LeaderboardEntry): Promise<void>;
-    getLeaderboard(page: number, limit: number): Promise<{ total: number, data: LeaderboardEntry[] }>;
+    getLeaderboard(page: number, limit: number): Promise<{ total: number; data: LeaderboardEntry[] }>;
 }

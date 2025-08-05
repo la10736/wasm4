@@ -17,6 +17,16 @@ export class InMemoryRepository implements IRepository {
         return user;
     }
 
+    async updateUserNonce(address: string): Promise<User> {
+        const user = this.users[address];
+        if (!user) {
+            throw new Error('User not found');
+        }
+        user.nonce = Math.floor(Math.random() * 1000000);
+        this.users[address] = user;
+        return user;
+    }
+
     async addLeaderboardEntry(entry: LeaderboardEntry): Promise<void> {
         this.leaderboard.push(entry);
         this.leaderboard.sort((a, b) => b.score - a.score);

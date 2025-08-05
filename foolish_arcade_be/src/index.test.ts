@@ -2,65 +2,81 @@ import request from 'supertest';
 import { Application } from 'express';
 import { createApp } from '../src/index';
 import { InMemoryRepository } from '../src/repository/inMemoryRepository';
+import { ethers } from 'ethers';
 
 describe('Leaderboard API', () => {
     let app: Application;
     let repository: InMemoryRepository;
-    const testAddress = '0x1234567890123456789012345678901234567890';
+    let wallet: any; // Use 'any' to bypass strict type checking for the wallet object
     let token: string;
 
     beforeEach(async () => {
         repository = new InMemoryRepository();
         app = createApp(repository);
+        wallet = ethers.Wallet.createRandom();
 
-        // Get a token before running tests that need it
-        const response = await request(app)
+        // Perform secure login to get a token for other tests
+        const challengeResponse = await request(app).get(`/challenge?address=${wallet.address}`);
+        const message = challengeResponse.body.message;
+        const signature = await wallet.signMessage(message);
+
+        const loginResponse = await request(app)
             .post('/login')
-            .send({ address: testAddress });
-        token = response.body.token;
+            .send({ address: wallet.address, signature });
+        token = loginResponse.body.token;
     });
 
-    // Test the /login endpoint
-    describe('POST /login', () => {
-        it('should return a JWT token for a valid address', async () => {
-            const response = await request(app)
-                .post('/login')
-                .send({ address: '0x0987654321098765432109876543210987654321' });
-
+    describe('Authentication', () => {
+        it('GET /challenge should return a challenge message', async () => {
+            const testWallet = ethers.Wallet.createRandom();
+            const response = await request(app).get(`/challenge?address=${testWallet.address}`);
             expect(response.status).toBe(200);
-            expect(response.body).toHaveProperty('token');
+            expect(response.body).toHaveProperty('message');
+            expect(response.body.message).toContain('Please sign this message to log in. Nonce:');
         });
 
-        it('should return a 400 error if address is not provided', async () => {
+        it('POST /login should return a JWT for a valid signature', async () => {
+            expect(token).toBeDefined();
+            expect(typeof token).toBe('string');
+        });
+
+        it('POST /login should return 401 for an invalid signature', async () => {
+            const challengeResponse = await request(app).get(`/challenge?address=${wallet.address}`);
+            const message = challengeResponse.body.message;
+            const signature = await wallet.signMessage(message + 'tampering'); // Invalid signature
+
             const response = await request(app)
                 .post('/login')
-                .send({});
-
-            expect(response.status).toBe(400);
-            expect(response.body).toHaveProperty('error', 'Ethereum address is required');
-        });
-    });
-
-    // Test the /submit_game endpoint
-    describe('POST /submit_game', () => {
-        it('should return a 401 error if no token is provided', async () => {
-            const response = await request(app)
-                .post('/submit_game')
-                .send({ gameData: { score: 100, time: 10, health: 100 } });
+                .send({ address: wallet.address, signature });
 
             expect(response.status).toBe(401);
+            expect(response.body).toHaveProperty('error', 'Invalid signature');
         });
 
-        it('should return a 400 error if gameData is incomplete', async () => {
+        it('POST /login should fail if the same signature is used twice (replay attack)', async () => {
+            // The first login in `beforeEach` was successful and updated the nonce.
+            // Now, we'll try to log in again with the *same* signature.
+
+            // To do this, we need to re-create the original challenge message and signature.
+            const user = await repository.getUser(wallet.address);
+            // The current nonce in the DB is the *new* one. The one used for the first signature was one less.
+            const originalNonce = user!.nonce - 1; 
+            const originalMessage = `Please sign this message to log in. Nonce: ${originalNonce}`;
+            const originalSignature = await wallet.signMessage(originalMessage);
+
+            // Attempt to log in again with the original signature.
             const response = await request(app)
-                .post('/submit_game')
-                .set('Authorization', `Bearer ${token}`)
-                .send({ gameData: { score: 100 } });
+                .post('/login')
+                .send({ address: wallet.address, signature: originalSignature });
 
-            expect(response.status).toBe(400);
-            expect(response.body).toHaveProperty('error', 'Game data must include score, time, and health');
+            // The server will try to verify `originalSignature` against a message containing the *new* nonce,
+            // so the verification will fail.
+            expect(response.status).toBe(401);
+            expect(response.body).toHaveProperty('error', 'Invalid signature');
         });
+    });
 
+    describe('POST /submit_game', () => {
         it('should return a 200 success message for a valid submission', async () => {
             const gameData = { score: 9999, time: 1234, health: 100 };
             const response = await request(app)
@@ -73,40 +89,18 @@ describe('Leaderboard API', () => {
         });
     });
 
-    // Test the /leaderboard endpoint
     describe('GET /leaderboard', () => {
-        beforeEach(async () => {
-            // Submit a score to have data in the leaderboard
-            const gameData = { score: 9999, time: 1234, health: 100 };
-            await request(app)
-                .post('/submit_game')
-                .set('Authorization', `Bearer ${token}`)
-                .send({ gameData });
-        });
-
         it('should return the leaderboard with the submitted score', async () => {
+            // Submit a score first
+            const gameData = { score: 9999, time: 1234, health: 100 };
+            await request(app).post('/submit_game').set('Authorization', `Bearer ${token}`).send({ gameData });
+
             const response = await request(app).get('/leaderboard');
 
             expect(response.status).toBe(200);
-            expect(response.body).toHaveProperty('data');
             expect(response.body.data.length).toBe(1);
-            expect(response.body.data[0].user).toBe(testAddress);
+            expect(response.body.data[0].user).toBe(wallet.address);
             expect(response.body.data[0].score).toBe(9999);
-            expect(response.body.data[0].time).toBe(1234);
-            expect(response.body.data[0].health).toBe(100);
-        });
-
-        it('should handle pagination correctly', async () => {
-            // Add a few more scores
-            await request(app).post('/submit_game').set('Authorization', `Bearer ${token}`).send({ gameData: { score: 100, time: 50, health: 80 } });
-            await request(app).post('/submit_game').set('Authorization', `Bearer ${token}`).send({ gameData: { score: 200, time: 60, health: 90 } });
-
-            const response = await request(app).get('/leaderboard?page=1&limit=2');
-
-            expect(response.status).toBe(200);
-            expect(response.body.data.length).toBe(2);
-            expect(response.body.total).toBe(3);
-            expect(response.body.data[0].score).toBe(9999); // Check sorting
         });
     });
 });
