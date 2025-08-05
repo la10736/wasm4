@@ -1,15 +1,16 @@
-import express, { Request, Response } from 'express';
-import bodyParser from 'body-parser';
+import express, { Application, Request, Response, NextFunction } from 'express';
+import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import { ethers } from 'ethers';
-import { IRepository, LeaderboardEntry } from './repository/types';
+import { IRepository, LeaderboardEntry, User } from './repository/types';
 import { FileRepository } from './repository/fileRepository';
 
 const JWT_SECRET = 'your-super-secret-key'; // In a real app, use an environment variable
 
 export function createApp(repository: IRepository) {
-    const app = express();
-    app.use(bodyParser.json());
+    const app: Application = express();
+    app.use(cors()); // Allow all origins for local development
+    app.use(express.json()); // Use the built-in express json parser
 
     // 1a. Get challenge message
     app.get('/challenge', async (req: Request, res: Response) => {
