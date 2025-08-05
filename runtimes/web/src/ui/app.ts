@@ -286,7 +286,7 @@ export class App extends LitElement {
             display: block;
             width: 100%;
             height: 100%;
-            image-rendering: auto; /* or crisp-edges */
+            image-rendering: pixelated; /* or crisp-edges */
             transform: translateZ(0);
         }
 
@@ -333,8 +333,7 @@ export class App extends LitElement {
         .content canvas {
             width: 100%;
             height: 100%;
-            image-rendering: auto;
-            image-rendering: auto;
+            image-rendering: pixelated;
         }
     `;
 
