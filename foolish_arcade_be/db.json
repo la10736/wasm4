@@ -1,4 +1,9 @@
 {
-  "users": {},
+  "users": {
+    "0x3804ccdabe7fb330efb8439238dc1e1b91b5e6d5": {
+      "address": "0x3804ccdabe7fb330efb8439238dc1e1b91b5e6d5",
+      "nonce": 341563
+    }
+  },
   "leaderboard": []
 }

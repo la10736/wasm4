@@ -1,14 +1,18 @@
 import './style.css';
+import './wasm4.css';
 import { ethers } from 'ethers';
 import Onboard from '@web3-onboard/core';
 import injectedModule from '@web3-onboard/injected-wallets';
 
-declare const wasm4: any;
-
 // UI Elements
 const connectButton = document.getElementById('connect-button') as HTMLButtonElement;
 const disconnectButton = document.getElementById('disconnect-button') as HTMLButtonElement;
-const startButton = document.getElementById('start-button') as HTMLButtonElement;
+const startButton = document.getElementById('start-button')!;
+const gameContainer = document.getElementById('game-container')!;
+const gameView = document.getElementById('game-view')!;
+const leaderboardContainer = document.getElementById('leaderboard-container')!;
+const leaderboardBody = document.getElementById('leaderboard-body')! as HTMLTableSectionElement;
+const playAgainButton = document.getElementById('play-again-button')! as HTMLButtonElement;
 const walletStatusDiv = document.getElementById('wallet-status') as HTMLDivElement;
 
 // Web3-Onboard Initialization
@@ -121,7 +125,7 @@ disconnectButton.addEventListener('click', async () => {
     }
 });
 
-startButton.addEventListener('click', () => {
+startButton.addEventListener('click', async () => {
     if (!jwtToken) {
         alert('You are not logged in!');
         return;
@@ -133,9 +137,64 @@ startButton.addEventListener('click', () => {
     disconnectButton.style.display = 'none';
     startButton.style.display = 'none';
 
-    // Run the game
-    wasm4.run('/cart.wasm');
+    await startGame();
 });
+
+async function startGame() {
+    document.body.classList.add('game-active');
+    gameContainer.innerHTML = ''; // Clear previous game instance
+    const wasm4 = new (window as any).Wasm4({ container: gameContainer });
+    console.log('Starting game...');
+    try {
+        const gameData = await wasm4.run('/cart.wasm');
+        console.log('Game exited, received data:', gameData);
+
+        // TODO: Hide game container, show results/leaderboard
+
+        // Now, submit the data to the backend
+        await submitGameData(gameData);
+
+    } catch (err) {
+        console.error('Error during game execution:', err);
+    }
+}
+
+async function submitGameData(gameData: any) {
+    if (!jwtToken) {
+        console.error('No JWT token available for submission');
+        alert('Authentication error. Please log in again.');
+        return;
+    }
+
+    console.log('Submitting game data to backend...');
+    try {
+        const response = await fetch('http://localhost:3000/submit_game', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${jwtToken}`
+            },
+            body: JSON.stringify(gameData)
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            console.log('Submission successful:', result);
+            // Hide game, show leaderboard
+            document.body.classList.remove('game-active');
+            gameView.style.display = 'none';
+            leaderboardContainer.style.display = 'block';
+            await showLeaderboard();
+        } else {
+            const errorText = await response.text();
+            console.error('Submission failed:', response.status, errorText);
+            alert(`Failed to submit game data: ${errorText}`);
+        }
+    } catch (error) {
+        console.error('Error submitting game data:', error);
+        alert('An error occurred while submitting your game data.');
+    }
+}
 
 // Subscribe to wallet changes
 onboard.state.select('wallets').subscribe((wallets) => {
@@ -155,6 +214,43 @@ onboard.state.select('wallets').subscribe((wallets) => {
         updateUI(null);
     }
 });
+
+
+
+playAgainButton.addEventListener('click', () => {
+    leaderboardContainer.style.display = 'none';
+    gameView.style.display = 'block';
+    document.body.classList.remove('game-active');
+});
+
+async function showLeaderboard() {
+    console.log('Fetching leaderboard...');
+    try {
+        const response = await fetch('http://localhost:3000/get_leaderboard');
+        if (response.ok) {
+            const leaderboardData = await response.json();
+            leaderboardBody.innerHTML = ''; // Clear previous entries
+
+            leaderboardData.forEach((entry: any, index: number) => {
+                const row = leaderboardBody.insertRow();
+                row.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td>${entry.user.substring(0, 6)}...${entry.user.substring(entry.user.length - 4)}</td>
+                    <td>${entry.score}</td>
+                    <td>${(entry.time / 60).toFixed(2)}s</td>
+                    <td>${entry.health}</td>
+                `;
+            });
+
+        } else {
+            console.error('Failed to fetch leaderboard');
+            alert('Could not load leaderboard data.');
+        }
+    } catch (error) {
+        console.error('Error fetching leaderboard:', error);
+        alert('An error occurred while fetching the leaderboard.');
+    }
+}
 
 // Initial UI state
 updateUI(null);

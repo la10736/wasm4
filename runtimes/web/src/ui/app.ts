@@ -282,19 +282,38 @@ class GamepadEventRecorder {
 @customElement("wasm4-app")
 export class App extends LitElement {
     static styles = css`
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: auto; /* or crisp-edges */
+            transform: translateZ(0);
+        }
+
         :host {
+            /* CSS Reset to isolate component from parent page styles */
+            animation: none !important;
+            border: none !important;
+            box-shadow: none !important;
+            text-shadow: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+
+            /* Standard layout for the component */
+            background: #202020;
             width: 100%;
             height: 100%;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
+            position: relative;
 
+            /* Prevent touch/selection issues */
             touch-action: none;
             user-select: none;
             -webkit-user-select: none;
             -webkit-tap-highlight-color: transparent;
-
-            background: #202020;
         }
 
         .content {
@@ -314,8 +333,8 @@ export class App extends LitElement {
         .content canvas {
             width: 100%;
             height: 100%;
-            image-rendering: pixelated;
-            image-rendering: crisp-edges;
+            image-rendering: auto;
+            image-rendering: auto;
         }
     `;
 
@@ -339,7 +358,8 @@ export class App extends LitElement {
 
     private readonly diskPrefix: string;
 
-    @state() private onExit: ((data: { persistentData: PersistentData, events: GamepadEvent[] }) => void) | null = null;
+    @state() private onExit!: (data: { persistentData: PersistentData, events: GamepadEvent[] }) => void;
+    private resolveRunPromise?: (value: { persistentData: PersistentData, events: GamepadEvent[] }) => void;
 
     readonly onPointerUp = (event: PointerEvent) => {
         if (event.pointerType == "touch") {
@@ -351,16 +371,25 @@ export class App extends LitElement {
         this.runtime.unlockAudio();
     }
 
-    constructor () {
+    constructor (options?: { container?: HTMLElement }) {
         super();
+
+        if (options?.container) {
+            options.container.appendChild(this);
+        }
 
         this.diskPrefix = document.getElementById("wasm4-disk-prefix")?.textContent ?? utils.getUrlParam("disk-prefix") as string;
         this.runtime = new Runtime(`${this.diskPrefix}-disk`);
 
-        this.init();
+
     }
 
-    async init () {
+    run = (cartUrl: string) => new Promise(async (resolve) => {
+        this.resolveRunPromise = resolve;
+        await this.init(cartUrl);
+    });
+
+    async init (cartUrl: string) {
         this.runtime.persistentData.game_mode = 1;
         this.runtime.persistentData.max_frames = 60 * 60 * 2; // 2 minutes
         this.runtime.persistentData.game_seed = Date.now();
@@ -379,7 +408,7 @@ export class App extends LitElement {
 
             } else {
                 // Load the cart from a url
-                const cartUrl = utils.getUrlParam("url") ?? "cart.wasm";
+                // const cartUrl = utils.getUrlParam("url") ?? "cart.wasm";
                 const res = await fetch(cartUrl);
                 if (res.ok) {
                     return new Uint8Array(await res.arrayBuffer());
@@ -793,23 +822,22 @@ export class App extends LitElement {
                         if (this.requestAnimationFrameId) {
                             cancelAnimationFrame(this.requestAnimationFrameId);
                         }
-                        
-                        // Save gamepad events and log persistent data on exit
-                        if (this.gamepadRecorder.getEvents().length > 0) {
-                            const filename = `gamepad-events-${runtime.persistentData.game_seed}.bin`;
-                            this.gamepadRecorder.exportToFile(this.runtime.persistentData);
-                            console.log(`Saved ${this.gamepadRecorder.getEvents().length} gamepad events to ${filename}`);
+
+                        const exitData = {
+                            persistentData: this.runtime.persistentData,
+                            events: this.gamepadRecorder.getEvents(),
+                        };
+
+                        // Resolve the promise returned by run()
+                        if (this.resolveRunPromise) {
+                            this.resolveRunPromise(exitData);
                         }
-                        
-                        console.log("--- Persistent Data ---");
-                        console.log(`Game Mode:  ${runtime.persistentData.game_mode}`);
-                        console.log(`Max Frames: ${runtime.persistentData.max_frames}`);
-                        console.log(`Game Seed:  ${runtime.persistentData.game_seed}`);
-                        console.log(`Frames:     ${runtime.persistentData.frames}`);
-                        console.log(`Score:      ${runtime.persistentData.score}`);
-                        console.log(`Health:     ${runtime.persistentData.health}`);
-                        console.log("-----------------------");
-                        
+
+                        // Also call the onExit callback for external listeners
+                        if (this.onExit) {
+                            this.onExit(exitData);
+                        }
+
                         this.notifications.show("Cart exited.");
                         return;
                     }
@@ -1074,3 +1102,5 @@ declare global {
         "wasm4-app": App;
     }
 }
+
+(window as any).Wasm4 = App;
