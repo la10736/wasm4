@@ -134,8 +134,6 @@ export function createApp(repository: IRepository) {
     app.get('/leaderboard/subscribe/:id', async (req: Request, res: Response) => {
         const { id } = req.params;
 
-        console.info(`Subscribing to entry ${id}`);
-
         res.setHeader("Transfer-Encoding", "chunked")
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
@@ -143,14 +141,11 @@ export function createApp(repository: IRepository) {
         await res.flushHeaders();
 
         const sendUpdate = (data: any) => {
-            console.info(`Sending update for entry ${id}: ${data}`);
             res.write(`data: ${JSON.stringify(data)}\n\n`);
         };
 
         const onUpdate = (data: { id: string, state: ProofState }) => {
-            console.info(`on update : ${JSON.stringify(data)} ${id} `);
             if (data.id === id) {
-                console.info(`on update ${id}: ${data}`);
                 sendUpdate(data);
             }
         };
@@ -159,7 +154,6 @@ export function createApp(repository: IRepository) {
         try {
             const initialState = await repository.getLeaderboardEntry(id);
             if (initialState) {
-                console.info(`Sending initial state for entry ${id}: ${initialState}`);
                 sendUpdate(initialState);
             }
         } catch (error) {
@@ -172,7 +166,6 @@ export function createApp(repository: IRepository) {
             repository.emitter.off('update', onUpdate);
             res.end();
         });
-        console.info(`subscribe end ${id}`);
     });
 
     app.get('/leaderboard', async (req: Request, res: Response) => {
