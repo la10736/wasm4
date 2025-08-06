@@ -4,9 +4,6 @@
 # Production
 /dist
 
-# Data
-db.json
-
 # Logs
 npm-debug.log*
 yarn-debug.log*

@@ -77,10 +77,35 @@ body.game-active #scanline-overlay {
     display: none;
 }
 
+#controls {
+  display: flex;
+  flex-direction: row;
+  gap: 1rem;
+  justify-content: center;
+}
+
+button {
+  background-color: transparent;
+  border: 1px solid var(--primary-color);
+  color: var(--primary-color);
+  font-family: var(--font-family);
+  padding: 0.2rem 0.5rem; /* Reduced padding */
+  font-size: 0.5rem;      /* Reduced font size */
+  cursor: pointer;
+  text-shadow: 0 0 3px var(--primary-color);
+  transition: all 0.2s ease-in-out;
+}
+
+button:hover {
+  background-color: var(--primary-color);
+  color: var(--background-color);
+  box-shadow: 0 0 10px var(--primary-color);
+}
+
 /* Leaderboard Styles */
 #leaderboard-container {
   width: 100%;
-  height: 100%;
+  /* height: 100%; */ /* Removed to prevent pushing controls out */
   display: flex;
   flex-direction: column;
 }
@@ -93,12 +118,12 @@ body.game-active #scanline-overlay {
 #leaderboard-container table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.7rem; /* Smaller font for the table */
+  font-size: 0.6rem; /* Even smaller font for the table */
 }
 
 #leaderboard-container th,
 #leaderboard-container td {
-  padding: 0.4rem;
+  padding: 0.2rem 0.4rem; /* Reduced padding */
   text-align: left;
   border-bottom: 1px solid var(--primary-color);
   white-space: nowrap;
