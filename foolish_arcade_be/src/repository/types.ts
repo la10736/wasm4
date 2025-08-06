@@ -11,10 +11,17 @@ export interface LeaderboardEntry {
     id: string;
     user: string;
     score: number;
-    time: number;
+    duration: number; // game duration in seconds
     health: number;
     createdAt: string; // ISO 8601 format
     proofState: ProofState;
+}
+
+export interface GameSubmissionData {
+    user: string;
+    score: number;
+    time: number; // from game, in frames
+    health: number;
 }
 
 export interface IRepository {
@@ -22,7 +29,7 @@ export interface IRepository {
     getUser(address: string): Promise<User | undefined>;
     getOrCreateUser(address: string): Promise<User>;
     updateUserNonce(address: string): Promise<User>;
-    addLeaderboardEntry(entry: Omit<LeaderboardEntry, 'id' | 'createdAt' | 'proofState'>): Promise<LeaderboardEntry>;
+    addLeaderboardEntry(entryData: GameSubmissionData): Promise<LeaderboardEntry>;
     getLeaderboard(page: number, limit: number): Promise<{ total: number; data: { entry: LeaderboardEntry, position: number }[] }>;
     getLeaderboardEntry(id: string): Promise<{ entry: LeaderboardEntry; position: number } | undefined>;
     updateLeaderboardEntry(id: string, updates: { proofState: ProofState }): Promise<LeaderboardEntry | undefined>;

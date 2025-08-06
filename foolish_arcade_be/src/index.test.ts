@@ -2,8 +2,9 @@ import request from 'supertest';
 import { Application } from 'express';
 import { createApp } from '../src/index';
 import { InMemoryRepository } from '../src/repository/inMemoryRepository';
-import { LeaderboardEntry } from '../src/repository/types';
+import { IRepository, LeaderboardEntry, User, GameSubmissionData } from '../src/repository/types';
 import { ethers } from 'ethers';
+import { assert, error } from 'console';
 
 describe('Leaderboard API', () => {
     let app: Application;
@@ -13,29 +14,29 @@ describe('Leaderboard API', () => {
 
     beforeEach(async () => {
         repository = new InMemoryRepository();
-        // Clear the repository before each test to ensure isolation
-        repository.clear(); 
         app = createApp(repository);
         wallet = ethers.Wallet.createRandom();
 
-        // Perform secure login to get a token for other tests
-        const challengeResponse = await request(app).get(`/challenge?address=${wallet.address}`);
-        const message = challengeResponse.body.message;
+        // Perform a full login flow to get a valid token
+        const user = await repository.getOrCreateUser(wallet.address);
+        const message = `Please sign this message to log in. Nonce: ${user.nonce}`;
         const signature = await wallet.signMessage(message);
 
-        const loginResponse = await request(app)
+        const response = await request(app)
             .post('/login')
             .send({ address: wallet.address, signature });
-        token = loginResponse.body.token;
+
+        token = response.body.token;
     });
+
 
     describe('Authentication', () => {
         it('GET /challenge should return a challenge message', async () => {
-            const testWallet = ethers.Wallet.createRandom();
-            const response = await request(app).get(`/challenge?address=${testWallet.address}`);
+            const response = await request(app).get(`/challenge?address=${wallet.address}`);
             expect(response.status).toBe(200);
             expect(response.body).toHaveProperty('message');
-            expect(response.body.message).toContain('Please sign this message to log in. Nonce:');
+            const user = await repository.getUser(wallet.address);
+            expect(response.body.message).toContain(`${user!.nonce}`);
         });
 
         it('POST /login should return a JWT for a valid signature', async () => {
@@ -44,36 +45,30 @@ describe('Leaderboard API', () => {
         });
 
         it('POST /login should return 401 for an invalid signature', async () => {
-            const challengeResponse = await request(app).get(`/challenge?address=${wallet.address}`);
-            const message = challengeResponse.body.message;
-            const signature = await wallet.signMessage(message + 'tampering'); // Invalid signature
+            const user = await repository.getUser(wallet.address);
+            const message = `Please sign this message to log in. Nonce: ${user!.nonce}`;
+            // Sign with a different wallet
+            const invalidSignature = await ethers.Wallet.createRandom().signMessage(message);
 
             const response = await request(app)
                 .post('/login')
-                .send({ address: wallet.address, signature });
+                .send({ address: wallet.address, signature: invalidSignature });
 
             expect(response.status).toBe(401);
             expect(response.body).toHaveProperty('error', 'Invalid signature');
         });
 
         it('POST /login should fail if the same signature is used twice (replay attack)', async () => {
-            // The first login in `beforeEach` was successful and updated the nonce.
-            // Now, we'll try to log in again with the *same* signature.
-
-            // To do this, we need to re-create the original challenge message and signature.
+            // The first login in beforeEach used the signature and invalidated the nonce.
+            // Now, we try to log in again with the same signature.
             const user = await repository.getUser(wallet.address);
-            // The current nonce in the DB is the *new* one. The one used for the first signature was one less.
-            const originalNonce = user!.nonce - 1; 
-            const originalMessage = `Please sign this message to log in. Nonce: ${originalNonce}`;
-            const originalSignature = await wallet.signMessage(originalMessage);
+            const message = `Please sign this message to log in. Nonce: ${user!.nonce - 1}`; // Use the old nonce
+            const signature = await wallet.signMessage(message);
 
-            // Attempt to log in again with the original signature.
             const response = await request(app)
                 .post('/login')
-                .send({ address: wallet.address, signature: originalSignature });
+                .send({ address: wallet.address, signature });
 
-            // The server will try to verify `originalSignature` against a message containing the *new* nonce,
-            // so the verification will fail.
             expect(response.status).toBe(401);
             expect(response.body).toHaveProperty('error', 'Invalid signature');
         });
@@ -94,113 +89,119 @@ describe('Leaderboard API', () => {
 
     describe('GET /leaderboard', () => {
         it('should return the leaderboard with the submitted score', async () => {
-            // Submit a score first
-            const submissionData = { score: 9999, time: 1234, health: 100 };
-            await request(app).post('/submit_game').set('Authorization', `Bearer ${token}`).send(submissionData);
+            const submissionData = { score: 9999, time: 1234, health: 100 }; // time is in frames
+            await request(app)
+                .post('/submit_game')
+                .set('Authorization', `Bearer ${token}`)
+                .send(submissionData);
 
             const response = await request(app).get('/leaderboard');
 
             expect(response.status).toBe(200);
             expect(response.body.data.length).toBe(1);
-            expect(response.body.data[0].entry.user).toBe(wallet.address);
-            expect(response.body.data[0].entry.score).toBe(9999);
+            const entry = response.body.data[0].entry;
+            expect(entry.user).toBe(wallet.address);
+            expect(entry.score).toBe(9999);
+            expect(entry.duration).toBe(123.4); // 1234 frames / 10 fps
         });
     });
 
-    describe('GET /leaderboard/neighbors/:id?', () => {
-        const mockEntriesData: Omit<LeaderboardEntry, 'id' | 'createdAt' | 'proofState'>[] = Array.from({ length: 20 }, (_, i) => ({
-            user: `user-${i + 1}`,
-            score: 1000 - i * 10,
-            time: 120 + i,
-            health: 100 - i,
-        }));
-        let createdEntries: LeaderboardEntry[] = [];
-
+    describe('GET /leaderboard/neighbors', () => {
         beforeEach(async () => {
-            // Populate the repository with mock data
-            createdEntries = [];
-            for (const entryData of mockEntriesData) {
-                const newEntry = await repository.addLeaderboardEntry(entryData);
-                createdEntries.push(newEntry);
+            for (let i = 0; i < 10; i++) {
+                const submission: GameSubmissionData = {
+                    user: `test-user-${i}`,
+                    score: 1000 - i * 10,
+                    time: (100 + i) * 10, // Store as frames
+                    health: 100 - i,
+                };
+                await repository.addLeaderboardEntry(submission);
             }
         });
 
         it('should return top N entries when no ID is provided', async () => {
-            const limit = 10;
-            const response = await request(app).get(`/leaderboard/neighbors?before=5&after=4`); // before+after+1 = 10
-
+            const response = await request(app).get('/leaderboard/neighbors?after=5');
             expect(response.status).toBe(200);
-            expect(response.body).toHaveLength(limit);
-            expect(response.body[0].entry.score).toBe(1000); // Highest score
-            expect(response.body[9].entry.score).toBe(1000 - 9 * 10); // 10th highest score
+            expect(response.body.length).toBe(5);
+            expect(response.body[0].entry.score).toBe(1000);
         });
 
         it('should return neighbors for a given ID', async () => {
-            const targetEntry = createdEntries[9]; // 10th entry, score 910
-            const response = await request(app).get(`/leaderboard/neighbors/${targetEntry.id}?before=5&after=5`);
+            const allEntries = (await repository.getLeaderboard(1, 10)).data;
+            const targetEntryId = allEntries[4].entry.id;
 
+            const response = await request(app).get(`/leaderboard/neighbors/${targetEntryId}?before=2&after=2`);
             expect(response.status).toBe(200);
-            expect(response.body).toHaveLength(11);
-            // The 10th entry should be the 6th item in the response (5 before, 1 self, 5 after)
-            expect(response.body[5].entry.id).toBe(targetEntry.id);
-            expect(response.body[0].entry.score).toBe(1000 - 4 * 10); // 5th entry's score
+            expect(response.body.length).toBe(5);
+            expect(response.body[2].entry.id).toBe(targetEntryId);
         });
 
         it('should return 404 if the entry ID is not found', async () => {
-            const nonExistentId = 'id-999';
-            const response = await request(app).get(`/leaderboard/neighbors/${nonExistentId}`);
-
+            const response = await request(app).get('/leaderboard/neighbors/non-existent-id');
             expect(response.status).toBe(404);
             expect(response.body.error).toBe('Leaderboard entry not found');
         });
     });
+});
 
-    describe('GET /leaderboard/subscribe', () => {
-        it('should stream updates when a leaderboard entry proofState changes', (done) => {
-            // Use a live instance of the app for SSE testing
-            const liveApp = createApp(repository);
-            const server = liveApp.listen(0); // Listen on a random free port
-            const address = server.address();
-            const port = typeof address === 'string' ? 0 : address?.port;
+describe('Leaderboard SSE API', () => {
+    let repository: InMemoryRepository;
+    let app: Application;
+    let server: ReturnType<typeof app.listen>;
+    let controller = new AbortController();
+    let signal = controller.signal;
 
-            let entryToUpdate: LeaderboardEntry;
+    beforeEach(async () => {
+        repository = new InMemoryRepository();
+        app = createApp(repository);
+        server = await app.listen(34565);
+    });
 
-            // 1. Add an entry to have something to update
-            repository.addLeaderboardEntry({
-                user: 'sse-user',
-                score: 123,
-                time: 45,
-                health: 67
-            }).then(newEntry => {
-                entryToUpdate = newEntry;
+    afterEach(async () => {
+        controller.abort();
+        await server.close();
+    });
 
-                // 2. Connect to the SSE endpoint
-                const req = request(server).get('/leaderboard/subscribe');
-
-                req.on('response', (res) => {
-                    res.on('data', (chunk: Buffer) => {
-                        const data = chunk.toString();
-                        if (data.includes('event: leaderboardUpdate')) {
-                            const jsonData = data.split('\n')[1].replace('data: ', '');
-                            const parsedData = JSON.parse(jsonData);
-                            
-                            // 4. Assert the received data is correct
-                            expect(parsedData.id).toBe(entryToUpdate.id);
-                            expect(parsedData.proofState).toBe('proved');
-                            
-                            server.close(); // Clean up the server
-                            done(); // Finish the test
-                        }
-                    });
+    it('should stream updates when an entry changes', async () => {
+        let entryToUpdate = await repository.addLeaderboardEntry({
+            user: 'sse-user',
+            score: 123,
+            time: 45,
+            health: 67
+        });
+        const res = await fetch(`http://localhost:34565/leaderboard/subscribe/${entryToUpdate.id}`, { signal });
+        console.info(`Subscribed: send change`);
+        // Trigger an update now that we are listening
+        await repository.updateLeaderboardEntry(entryToUpdate.id, { proofState: 'proved' });
+        let found = await processChunkedResponse(res, (text) => {
+                    console.info(`Received text: ${text}`);
+                    return text.includes('proved');
                 });
-
-                req.end();
-
-                // 3. Trigger an update after a short delay
-                setTimeout(() => {
-                    repository.updateLeaderboardEntry(entryToUpdate.id, { proofState: 'proved' });
-                }, 100);
-            });
-        }, 1000); // Increase timeout for async SSE test
+        console.info(`Found: ${found}`);
+        expect(found).toBe(true);
     });
 });
+
+function processChunkedResponse(response: Response, checkData: (text: string) => boolean) : any {
+    var found = false;
+    var reader = response.body?.getReader()
+    var decoder = new TextDecoder();
+
+    return readChunk(checkData);
+
+    function readChunk(checkData: (text: string) => boolean) {
+        return reader?.read().then(r => checkChunk(r, checkData));
+    }
+
+    function checkChunk(result: any, checkData: (text: string) => boolean) : any {
+        var chunk = decoder.decode(result.value || new Uint8Array, { stream: !result.done });
+        console.info(`got chunk of ${chunk.length} bytes`)
+        found = checkData(chunk);
+        if (found || result.done) {
+            console.info('returning')
+            return found;
+        } 
+        console.info('recursing')
+        return readChunk(checkData);
+    }
+}

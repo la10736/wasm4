@@ -1,4 +1,4 @@
-import { IRepository, User, LeaderboardEntry, ProofState } from './types';
+import { IRepository, User, LeaderboardEntry, ProofState, GameSubmissionData } from './types';
 import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
 
@@ -30,10 +30,13 @@ export class InMemoryRepository implements IRepository {
         return user;
     }
 
-    async addLeaderboardEntry(entryData: Omit<LeaderboardEntry, 'id' | 'createdAt' | 'proofState'>): Promise<LeaderboardEntry> {
+    async addLeaderboardEntry(entryData: GameSubmissionData): Promise<LeaderboardEntry> {
         const newEntry: LeaderboardEntry = {
-            ...entryData,
             id: randomUUID(),
+            user: entryData.user,
+            score: entryData.score,
+            duration: entryData.time / 10, // Game is 10fps
+            health: entryData.health,
             createdAt: new Date().toISOString(),
             proofState: 'inserted',
         };
@@ -62,12 +65,14 @@ export class InMemoryRepository implements IRepository {
     }
 
     async updateLeaderboardEntry(id: string, updates: { proofState: ProofState }): Promise<LeaderboardEntry | undefined> {
+        console.info(`Updating entry ${id} to proofState ${updates.proofState}}`);
         const entry = this.leaderboard.find(e => e.id === id);
         if (!entry) {
             return undefined;
         }
         entry.proofState = updates.proofState;
         this.emitter.emit('leaderboardUpdate', { id, proofState: entry.proofState });
+        console.info(`Updated entry ${id} to proofState ${entry.proofState}`);
         return entry;
     }
 

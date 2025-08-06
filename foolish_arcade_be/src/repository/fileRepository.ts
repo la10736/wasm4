@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import { promises as fs } from 'fs';
 import { randomUUID } from 'crypto';
 import path from 'path';
-import { IRepository, User, LeaderboardEntry, ProofState } from './types';
+import { IRepository, User, LeaderboardEntry, ProofState, GameSubmissionData } from './types';
 
 const DB_PATH = path.join(__dirname, '../../db.json');
 
@@ -68,11 +68,14 @@ export class FileRepository implements IRepository {
         return user;
     }
 
-    async addLeaderboardEntry(entry: Omit<LeaderboardEntry, 'id' | 'createdAt' | 'proofState'>): Promise<LeaderboardEntry> {
+    async addLeaderboardEntry(entryData: GameSubmissionData): Promise<LeaderboardEntry> {
         await this.initialization;
         const newEntry: LeaderboardEntry = {
             id: randomUUID(),
-            ...entry,
+            user: entryData.user,
+            score: entryData.score,
+            duration: entryData.time / 10, // Game is 10fps, so this is seconds
+            health: entryData.health,
             createdAt: new Date().toISOString(),
             proofState: 'inserted',
         };
@@ -81,7 +84,7 @@ export class FileRepository implements IRepository {
         await this.saveData();
 
         const position = this.data.leaderboard.findIndex(e => e.id === newEntry.id) + 1;
-        this.emitter.emit('update', { entry: newEntry, position });
+        this.emitter.emit('leaderboardUpdate', { entry: newEntry, position });
 
         return newEntry;
     }

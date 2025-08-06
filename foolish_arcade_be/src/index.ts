@@ -2,15 +2,15 @@ import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import { ethers } from 'ethers';
-import { IRepository, LeaderboardEntry, User } from './repository/types';
-import { FileRepository } from './repository/fileRepository';
+import { IRepository, LeaderboardEntry, User, GameSubmissionData, ProofState } from './repository/types';
+import { InMemoryRepository } from './repository/inMemoryRepository';
 
 const JWT_SECRET = 'your-super-secret-key'; // In a real app, use an environment variable
 
 export function createApp(repository: IRepository) {
     const app: Application = express();
     app.use(cors()); // Allow all origins for local development
-    app.use(express.json()); // Use the built-in express json parser
+    app.use(express.json()); // Middleware to parse JSON bodies
 
     // 1a. Get challenge message
     app.get('/challenge', async (req: Request, res: Response) => {
@@ -60,7 +60,7 @@ export function createApp(repository: IRepository) {
     });
 
     // Middleware to verify JWT
-    const authenticateToken = (req: Request, res: Response, next: Function) => {
+    const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
         const authHeader = req.headers['authorization'];
         const token = authHeader && authHeader.split(' ')[1];
 
@@ -83,10 +83,10 @@ export function createApp(repository: IRepository) {
         }
 
         try {
-            const entryData = {
+            const entryData: GameSubmissionData = {
                 user: user.address,
                 score: score,
-                time: time,
+                time: time, // time is in frames
                 health: health,
             };
             const newEntry = await repository.addLeaderboardEntry(entryData);
@@ -100,8 +100,8 @@ export function createApp(repository: IRepository) {
     // 4. Get leaderboard entry neighbours
     app.get('/leaderboard/neighbors/:id', async (req: Request, res: Response) => {
         const { id } = req.params;
-        const before = parseInt(req.query.before as string) || 5;
-        const after = parseInt(req.query.after as string) || 5;
+        const before = parseInt(req.query.before as string) || 0;
+        const after = parseInt(req.query.after as string) || 0;
 
         try {
             const neighbors = await repository.getLeaderboardEntryNeighbors(id, before, after);
@@ -116,12 +116,12 @@ export function createApp(repository: IRepository) {
     });
 
     app.get('/leaderboard/neighbors', async (req: Request, res: Response) => {
-        const before = parseInt(req.query.before as string) || 5;
-        const after = parseInt(req.query.after as string) || 5;
-        
+        const before = parseInt(req.query.before as string) || 0;
+        const after = parseInt(req.query.after as string) || 0;
+
         try {
             // If no ID, return top N entries
-            const limit = before + after + 1;
+            const limit = before + after;
             const leaderboard = await repository.getLeaderboard(1, limit);
             res.json(leaderboard.data);
         } catch (error) {
@@ -134,17 +134,23 @@ export function createApp(repository: IRepository) {
     app.get('/leaderboard/subscribe/:id', async (req: Request, res: Response) => {
         const { id } = req.params;
 
+        console.info(`Subscribing to entry ${id}`);
+
+        res.setHeader("Transfer-Encoding", "chunked")
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
-        res.flushHeaders();
+        await res.flushHeaders();
 
         const sendUpdate = (data: any) => {
+            console.info(`Sending update for entry ${id}: ${data}`);
             res.write(`data: ${JSON.stringify(data)}\n\n`);
         };
 
-        const onUpdate = (data: { entry: LeaderboardEntry, position: number }) => {
-            if (data.entry.id === id) {
+        const onUpdate = (data: { id: string, state: ProofState }) => {
+            console.info(`on update : ${JSON.stringify(data)} ${id} `);
+            if (data.id === id) {
+                console.info(`on update ${id}: ${data}`);
                 sendUpdate(data);
             }
         };
@@ -153,18 +159,20 @@ export function createApp(repository: IRepository) {
         try {
             const initialState = await repository.getLeaderboardEntry(id);
             if (initialState) {
+                console.info(`Sending initial state for entry ${id}: ${initialState}`);
                 sendUpdate(initialState);
             }
         } catch (error) {
             console.error('Failed to get initial state for subscription', error);
         }
 
-        repository.emitter.on('update', onUpdate);
+        repository.emitter.on('leaderboardUpdate', onUpdate);
 
         req.on('close', () => {
-            repository.emitter.off('update', onUpdate);
+            repository.emitter.off('leaderboardUpdate', onUpdate);
             res.end();
         });
+        console.info(`subscribe end ${id}`);
     });
 
     app.get('/leaderboard', async (req: Request, res: Response) => {
@@ -188,9 +196,10 @@ export function createApp(repository: IRepository) {
 }
 
 if (require.main === module) {
-    const port = 3000;
-    const app = createApp(new FileRepository());
+    const port = process.env.PORT || 3000;
+    const repository = new InMemoryRepository();
+    const app = createApp(repository);
     app.listen(port, () => {
-        console.log(`Leaderboard backend listening at http://localhost:${port}`);
+        console.log(`Server is running on port ${port}`);
     });
 }
