@@ -20,8 +20,12 @@ export interface LeaderboardEntry {
 export interface GameSubmissionData {
     user: string;
     score: number;
-    time: number; // from game, in frames
+    frames: number; // from game, in frames
     health: number;
+    seed: number;
+    max_frames: number;
+    game_mode: number;
+    serialized_events: string;
 }
 
 export interface IRepository {

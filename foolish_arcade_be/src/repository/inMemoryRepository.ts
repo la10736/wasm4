@@ -35,7 +35,7 @@ export class InMemoryRepository implements IRepository {
             id: randomUUID(),
             user: entryData.user,
             score: entryData.score,
-            duration: entryData.time / 10, // Game is 10fps
+            duration: entryData.frames / 10.0, // Game is 10fps
             health: entryData.health,
             createdAt: new Date().toISOString(),
             proofState: 'inserted',

@@ -166,7 +166,7 @@ async function startGame() {
     }
 }
 
-async function submitGameData(gameData: { persistentData: { view: DataView }, events: any[] }) {
+async function submitGameData(gameData: { persistentData: any, events_serialized: string }) {
     if (!jwtToken) {
         console.error('No JWT token, cannot submit game data.');
         return;
@@ -175,21 +175,26 @@ async function submitGameData(gameData: { persistentData: { view: DataView }, ev
     console.log('Submitting game data to backend...');
     try {
         // These offsets are defined in the WASM-4 runtime and must be kept in sync
-        const ADDR_PERSISTENT = 0xa0;
-        const OFFSET_SCORE = 4; // u32
-        const OFFSET_TIME = 8; // u32
-        const OFFSET_HEALTH = 12; // u32
 
-        const score = gameData.persistentData.view.getUint32(ADDR_PERSISTENT + OFFSET_SCORE, true);
-        const time = gameData.persistentData.view.getUint32(ADDR_PERSISTENT + OFFSET_TIME, true);
-        const health = gameData.persistentData.view.getUint32(ADDR_PERSISTENT + OFFSET_HEALTH, true);
+        const score = gameData.persistentData.score;
+        const frames = gameData.persistentData.frames;
+        const health = gameData.persistentData.health;
+        const seed = gameData.persistentData.game_seed;
+        const max_frames = gameData.persistentData.max_frames;
+        const game_mode = gameData.persistentData.game_mode;
+
+        console.info(`Submitting game data to backend... score: ${score}, frames: ${frames}, health: ${health}, seed: ${seed}, max_frames: ${max_frames}, game_mode: ${game_mode}`);
 
         const submissionPayload = {
             score,
-            time,
+            frames,
             health,
-            events: gameData.events,
+            seed,
+            max_frames,
+            game_mode,
+            serialized_events: gameData.events_serialized,
         };
+
 
         const response = await fetch('http://localhost:3000/submit_game', {
             method: 'POST',
@@ -207,7 +212,7 @@ async function submitGameData(gameData: { persistentData: { view: DataView }, ev
             document.body.classList.remove('game-active');
             gameView.style.display = 'none';
             leaderboardContainer.style.display = 'block';
-            await showLeaderboard(result.entryId);
+            await showLeaderboard(result.entryId, 5, 5);
         } else {
             const errorResult = await response.json();
             console.error(`Submission failed: ${response.status}`, errorResult);
@@ -248,9 +253,9 @@ playAgainButton.addEventListener('click', () => {
     activeSseConnections = [];
 });
 
-async function showLeaderboard(entryId?: string) {
+async function showLeaderboard(entryId?: string, before?: number, after?: number) {
     const url = entryId 
-        ? `http://localhost:3000/leaderboard/neighbors/${entryId}` 
+        ? `http://localhost:3000/leaderboard/neighbors/${entryId}${before ? `?before=${before}` : ''}${after ? `&after=${after}` : ''}` 
         : 'http://localhost:3000/leaderboard/neighbors';
 
     console.log(`Fetching leaderboard from ${url}`)

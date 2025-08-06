@@ -74,7 +74,7 @@ export class FileRepository implements IRepository {
             id: randomUUID(),
             user: entryData.user,
             score: entryData.score,
-            duration: entryData.time / 10, // Game is 10fps, so this is seconds
+            duration: entryData.frames / 10.0, // Game is 10fps, so this is seconds
             health: entryData.health,
             createdAt: new Date().toISOString(),
             proofState: 'inserted',

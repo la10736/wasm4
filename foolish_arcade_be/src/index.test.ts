@@ -76,7 +76,7 @@ describe('Leaderboard API', () => {
 
     describe('POST /submit_game', () => {
         it('should return a 200 success message for a valid submission', async () => {
-            const submissionData = { score: 9999, time: 1234, health: 100 };
+            const submissionData = { score: 9999, frames: 1234, health: 100, seed: 123, max_frames: 123, game_mode: 1, serialized_events: 'some events' };
             const response = await request(app)
                 .post('/submit_game')
                 .set('Authorization', `Bearer ${token}`)
@@ -84,12 +84,13 @@ describe('Leaderboard API', () => {
 
             expect(response.status).toBe(200);
             expect(response.body).toHaveProperty('message', 'Game data submitted successfully');
+            expect(response.body).toHaveProperty('entryId');
         });
     });
 
     describe('GET /leaderboard', () => {
         it('should return the leaderboard with the submitted score', async () => {
-            const submissionData = { score: 9999, time: 1234, health: 100 }; // time is in frames
+            const submissionData = { score: 9999, frames: 1234, health: 100, seed: 123, max_frames: 123, game_mode: 1, serialized_events: 'some events' }; // time is in frames
             await request(app)
                 .post('/submit_game')
                 .set('Authorization', `Bearer ${token}`)
@@ -112,8 +113,12 @@ describe('Leaderboard API', () => {
                 const submission: GameSubmissionData = {
                     user: `test-user-${i}`,
                     score: 1000 - i * 10,
-                    time: (100 + i) * 10, // Store as frames
+                    frames: (100 + i) * 10, // Store as frames
                     health: 100 - i,
+                    seed: 10000 - i * 10,
+                    max_frames: 10000 + i * 10,
+                    game_mode: 1,
+                    serialized_events: 'some events'
                 };
                 await repository.addLeaderboardEntry(submission);
             }
@@ -166,8 +171,12 @@ describe('Leaderboard SSE API', () => {
         let entryToUpdate = await repository.addLeaderboardEntry({
             user: 'sse-user',
             score: 123,
-            time: 45,
-            health: 67
+            frames: 45,
+            health: 67,
+            seed: 123,
+            max_frames: 123,
+            game_mode: 1,
+            serialized_events: 'some events'
         });
         const res = await fetch(`http://localhost:34565/leaderboard/subscribe/${entryToUpdate.id}`, { signal });
         console.info(`Subscribed: send change`);

@@ -75,19 +75,23 @@ export function createApp(repository: IRepository) {
 
     // 2. Submit a game result
     app.post('/submit_game', authenticateToken, async (req: Request, res: Response) => {
-        const { score, time, health } = req.body;
+        const { score, frames, health, seed, max_frames, game_mode, serialized_events } = req.body;
         const user = (req as any).user;
 
-        if (score === undefined || time === undefined || health === undefined) {
-            return res.status(400).json({ error: 'Game data must include score, time, and health' });
+        if (score === undefined || frames === undefined || health === undefined || seed === undefined || max_frames === undefined || game_mode === undefined || serialized_events === undefined) {
+            return res.status(400).json({ error: 'Game data must include score, frames, health, seed, max_frames, game_mode, and serialized_events' });
         }
 
         try {
             const entryData: GameSubmissionData = {
                 user: user.address,
                 score: score,
-                time: time, // time is in frames
+                frames: frames,
                 health: health,
+                seed: seed,
+                max_frames: max_frames,
+                game_mode: game_mode,
+                serialized_events: serialized_events,
             };
             const newEntry = await repository.addLeaderboardEntry(entryData);
             res.json({ message: 'Game data submitted successfully', entryId: newEntry.id });

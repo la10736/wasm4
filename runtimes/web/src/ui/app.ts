@@ -357,8 +357,8 @@ export class App extends LitElement {
 
     private readonly diskPrefix: string;
 
-    @state() private onExit!: (data: { persistentData: PersistentData, events: GamepadEvent[] }) => void;
-    private resolveRunPromise?: (value: { persistentData: PersistentData, events: GamepadEvent[] }) => void;
+    @state() private onExit!: (data: { persistentData: PersistentData, events_serialized: string }) => void;
+    private resolveRunPromise?: (value: { persistentData: PersistentData, events_serialized: string }) => void;
 
     readonly onPointerUp = (event: PointerEvent) => {
         if (event.pointerType == "touch") {
@@ -821,10 +821,12 @@ export class App extends LitElement {
                         if (this.requestAnimationFrameId) {
                             cancelAnimationFrame(this.requestAnimationFrameId);
                         }
+                        const byteStream = this.gamepadRecorder.serializeToByteStream();
+                        const encodedEvents = z85.encode(byteStream);
 
                         const exitData = {
                             persistentData: this.runtime.persistentData,
-                            events: this.gamepadRecorder.getEvents(),
+                            events_serialized: encodedEvents,
                         };
 
                         // Resolve the promise returned by run()
@@ -1080,7 +1082,7 @@ export class App extends LitElement {
         super.disconnectedCallback();
     }
 
-    setOnExit(callback: (data: { persistentData: PersistentData, events: GamepadEvent[] }) => void) {
+    setOnExit(callback: (data: { persistentData: PersistentData, events_serialized: string }) => void) {
         this.onExit = callback;
     }
 
