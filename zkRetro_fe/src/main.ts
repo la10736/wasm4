@@ -13,6 +13,7 @@ const gameView = document.getElementById('game-view')!;
 const leaderboardContainer = document.getElementById('leaderboard-container')!;
 const leaderboardBody = document.getElementById('leaderboard-body')! as HTMLTableSectionElement;
 const playAgainButton = document.getElementById('play-again-button')! as HTMLButtonElement;
+const leaderboardControls = document.getElementById('leaderboard-controls')!;
 
 const shortenAddress = (address: string) => `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
 const walletStatusDiv = document.getElementById('wallet-status') as HTMLDivElement;
@@ -109,13 +110,20 @@ async function updateUI(wallet: any | null) {
         connectButton.style.display = 'none';
         disconnectButton.style.display = 'block';
         startButton.style.display = 'block';
+        leaderboardContainer.style.display = 'none'; // Hide on connect
+
     } else {
-        walletStatusDiv.textContent = 'Not Connected';
-        jwtToken = null;
-        loggedInAddress = null;
+        walletStatusDiv.textContent = 'Not connected';
         connectButton.style.display = 'block';
         disconnectButton.style.display = 'none';
         startButton.style.display = 'none';
+        loggedInAddress = null;
+        jwtToken = null;
+
+        // Show leaderboard on the homepage
+        leaderboardContainer.style.display = 'block';
+        leaderboardControls.style.display = 'none'; // Hide controls on homepage
+        showLeaderboard();
     }
 }
 
@@ -208,11 +216,17 @@ async function submitGameData(gameData: { persistentData: any, events_serialized
         if (response.ok) {
             const result = await response.json();
             console.log('Submission successful:', result);
-            // Hide game, show leaderboard
-            document.body.classList.remove('game-active');
-            gameView.style.display = 'none';
-            leaderboardContainer.style.display = 'block';
-            await showLeaderboard(result.entryId, 5, 5);
+            if (result.entryId) {
+                console.log(`Submission successful, entry ID: ${result.entryId}`);
+                document.body.classList.remove('game-active');
+                gameView.style.display = 'none';
+                leaderboardContainer.style.display = 'block';
+                leaderboardControls.style.display = 'flex'; // Show controls after game
+                await showLeaderboard(result.entryId, 5, 5);
+            } else {
+                const errorResult = await response.json();
+                console.error(`Submission failed: ${response.status}`, errorResult);
+            }
         } else {
             const errorResult = await response.json();
             console.error(`Submission failed: ${response.status}`, errorResult);
@@ -246,6 +260,7 @@ onboard.state.select('wallets').subscribe((wallets) => {
 
 playAgainButton.addEventListener('click', () => {
     leaderboardContainer.style.display = 'none';
+    leaderboardControls.style.display = 'none';
     gameView.style.display = 'block';
     document.body.classList.remove('game-active');
     // Close active SSE connections when leaving the leaderboard
@@ -258,15 +273,17 @@ async function showLeaderboard(entryId?: string, before?: number, after?: number
         ? `http://localhost:3000/leaderboard/neighbors/${entryId}${before ? `?before=${before}` : ''}${after ? `&after=${after}` : ''}` 
         : 'http://localhost:3000/leaderboard/neighbors';
 
-    console.log(`Fetching leaderboard from ${url}`)
+    console.info(`Fetching leaderboard from ${url}`)
 
     try {
         const response = await fetch(url);
         if (!response.ok) {
             throw new Error(`Failed to fetch leaderboard: ${response.statusText}`);
         }
+        let data = await response.json();
+        console.info(`Fetched leaderboard ${JSON.stringify(data)}`)
 
-        const leaderboardData: { entry: any, position: number }[] = await response.json();
+        const leaderboardData: { entry: any, position: number }[] = data;
 
         // Close any previous connections before creating new ones
         activeSseConnections.forEach(conn => conn.close());
@@ -288,20 +305,20 @@ async function showLeaderboard(entryId?: string, before?: number, after?: number
                 <td class="proof-state">${entry.proofState}</td>
             `;
 
-            // Subscribe to real-time updates for this entry
-            const sse = new EventSource(`http://localhost:3000/leaderboard/subscribe/${entry.id}`);
-            sse.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                const targetRow = leaderboardBody.querySelector(`[data-entry-id="${entry.id}"]`);
-                if (targetRow) {
-                    const proofStateCell = targetRow.querySelector('.proof-state');
-                    if (proofStateCell) proofStateCell.textContent = data.proofState;
+            // // Subscribe to real-time updates for this entry
+            // const sse = new EventSource(`http://localhost:3000/leaderboard/subscribe/${entry.id}`);
+            // sse.onmessage = (event) => {
+            //     const data = JSON.parse(event.data);
+            //     const targetRow = leaderboardBody.querySelector(`[data-entry-id="${entry.id}"]`);
+            //     if (targetRow) {
+            //         const proofStateCell = targetRow.querySelector('.proof-state');
+            //         if (proofStateCell) proofStateCell.textContent = data.proofState;
                     
-                    const positionCell = targetRow.querySelector('.position');
-                    if (positionCell && data.position) positionCell.textContent = data.position;
-                }
-            };
-            activeSseConnections.push(sse);
+            //         const positionCell = targetRow.querySelector('.position');
+            //         if (positionCell && data.position) positionCell.textContent = data.position;
+            //     }
+            // };
+            // activeSseConnections.push(sse);
         });
 
     } catch (error) {

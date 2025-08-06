@@ -4,6 +4,8 @@ cli/assets/natives
 
 node_modules
 
+dist
+
 # Misc
 .DS_Store
 .env.local

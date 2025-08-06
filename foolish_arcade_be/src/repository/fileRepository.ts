@@ -37,6 +37,7 @@ export class FileRepository implements IRepository {
     }
 
     private async saveData(): Promise<void> {
+        console.info(`Saving data to ${DB_PATH}`)
         await fs.writeFile(DB_PATH, JSON.stringify(this.data, null, 2));
     }
 
@@ -70,6 +71,7 @@ export class FileRepository implements IRepository {
 
     async addLeaderboardEntry(entryData: GameSubmissionData): Promise<LeaderboardEntry> {
         await this.initialization;
+        console.info(`Adding leaderboard entry ${JSON.stringify(entryData)}`)
         const newEntry: LeaderboardEntry = {
             id: randomUUID(),
             user: entryData.user,
@@ -86,10 +88,8 @@ export class FileRepository implements IRepository {
         return newEntry;
     }
 
-    async getLeaderboard(page: number, limit: number): Promise<{ total: number; data: { entry: LeaderboardEntry, position: number }[] }> {
+    async getLeaderboard(startIndex: number, endIndex: number): Promise<{ total: number; data: { entry: LeaderboardEntry, position: number }[] }> {
         await this.initialization;
-        const startIndex = (page - 1) * limit;
-        const endIndex = page * limit;
         const slicedData = this.data.leaderboard.slice(startIndex, endIndex);
         const dataWithPosition = slicedData.map((entry, index) => ({
             entry,

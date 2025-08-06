@@ -31,6 +31,7 @@ export class InMemoryRepository implements IRepository {
     }
 
     async addLeaderboardEntry(entryData: GameSubmissionData): Promise<LeaderboardEntry> {
+        console.info(`Adding leaderboard entry MEMORY ${JSON.stringify(entryData)}`)
         const newEntry: LeaderboardEntry = {
             id: randomUUID(),
             user: entryData.user,
@@ -45,9 +46,7 @@ export class InMemoryRepository implements IRepository {
         return newEntry;
     }
 
-    async getLeaderboard(page: number, limit: number): Promise<{ total: number; data: { entry: LeaderboardEntry, position: number }[] }> {
-        const startIndex = (page - 1) * limit;
-        const endIndex = page * limit;
+    async getLeaderboard(startIndex: number, endIndex: number): Promise<{ total: number; data: { entry: LeaderboardEntry, position: number }[] }> {
         const slicedData = this.leaderboard.slice(startIndex, endIndex);
         const dataWithPosition = slicedData.map((entry, index) => ({
             entry,

@@ -34,7 +34,7 @@ export interface IRepository {
     getOrCreateUser(address: string): Promise<User>;
     updateUserNonce(address: string): Promise<User>;
     addLeaderboardEntry(entryData: GameSubmissionData): Promise<LeaderboardEntry>;
-    getLeaderboard(page: number, limit: number): Promise<{ total: number; data: { entry: LeaderboardEntry, position: number }[] }>;
+    getLeaderboard(startIndex: number, endIndex: number): Promise<{ total: number; data: { entry: LeaderboardEntry, position: number }[] }>;
     getLeaderboardEntry(id: string): Promise<{ entry: LeaderboardEntry; position: number } | undefined>;
     updateLeaderboardEntry(id: string, updates: { proofState: ProofState }): Promise<LeaderboardEntry | undefined>;
     getLeaderboardEntryNeighbors(id: string, before: number, after: number): Promise<{ entry: LeaderboardEntry, position: number }[] | undefined>;

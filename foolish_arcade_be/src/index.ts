@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { ethers } from 'ethers';
 import { IRepository, LeaderboardEntry, User, GameSubmissionData, ProofState } from './repository/types';
 import { InMemoryRepository } from './repository/inMemoryRepository';
+import { FileRepository } from './repository/fileRepository';
 
 const JWT_SECRET = 'your-super-secret-key'; // In a real app, use an environment variable
 
@@ -94,6 +95,7 @@ export function createApp(repository: IRepository) {
                 serialized_events: serialized_events,
             };
             const newEntry = await repository.addLeaderboardEntry(entryData);
+            console.info(`Added leaderboard entry ${JSON.stringify(newEntry)}`)
             res.json({ message: 'Game data submitted successfully', entryId: newEntry.id });
         } catch (error) {
             res.status(500).json({ error: 'Internal server error' });
@@ -120,13 +122,12 @@ export function createApp(repository: IRepository) {
     });
 
     app.get('/leaderboard/neighbors', async (req: Request, res: Response) => {
-        const before = parseInt(req.query.before as string) || 0;
-        const after = parseInt(req.query.after as string) || 0;
+        const limit = parseInt(req.query.after as string) || 10;
 
         try {
             // If no ID, return top N entries
-            const limit = before + after;
-            const leaderboard = await repository.getLeaderboard(1, limit);
+            const leaderboard = await repository.getLeaderboard(0, limit);
+            console.info(`Fetched leaderboard ${JSON.stringify(leaderboard)}`)
             res.json(leaderboard.data);
         } catch (error) {
             console.error('Failed to get leaderboard neighbors:', error);
@@ -173,14 +174,14 @@ export function createApp(repository: IRepository) {
     });
 
     app.get('/leaderboard', async (req: Request, res: Response) => {
-        const page = parseInt(req.query.page as string) || 1;
-        const limit = parseInt(req.query.limit as string) || 10;
+        const startIndex = parseInt(req.query.startIndex as string) || 0;
+        const endIndex = parseInt(req.query.endIndex as string) || 10;
 
         try {
-            const result = await repository.getLeaderboard(page, limit);
+            const result = await repository.getLeaderboard(startIndex, endIndex);
             res.json({
-                page,
-                limit,
+                startIndex,
+                endIndex,
                 total: result.total,
                 data: result.data
             });
@@ -194,7 +195,7 @@ export function createApp(repository: IRepository) {
 
 if (require.main === module) {
     const port = process.env.PORT || 3000;
-    const repository = new InMemoryRepository();
+    const repository = new FileRepository();
     const app = createApp(repository);
     app.listen(port, () => {
         console.log(`Server is running on port ${port}`);

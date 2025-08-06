@@ -77,6 +77,50 @@ body.game-active #scanline-overlay {
     display: none;
 }
 
+/* Leaderboard Styles */
+#leaderboard-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+#leaderboard-container h2 {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+}
+
+#leaderboard-container table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.7rem; /* Smaller font for the table */
+}
+
+#leaderboard-container th,
+#leaderboard-container td {
+  padding: 0.4rem;
+  text-align: left;
+  border-bottom: 1px solid var(--primary-color);
+  white-space: nowrap;
+}
+
+#leaderboard-container th {
+  text-shadow: none;
+}
+
+#leaderboard-container .current-player td {
+  background-color: rgba(0, 255, 0, 0.25); /* Brighter background */
+  box-shadow: 0 0 12px rgba(0, 255, 0, 0.8); /* More prominent shadow */
+}
+
+#leaderboard-controls {
+  display: none; /* Hidden by default, will be set to flex */
+  width: 100%;
+  justify-content: center;
+  margin-top: auto; /* Pushes it to the bottom */
+  padding-top: 1rem;
+}
+
 body.game-active #game-container {
     position: fixed;
     top: 0;

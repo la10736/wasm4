@@ -179,14 +179,11 @@ describe('Leaderboard SSE API', () => {
             serialized_events: 'some events'
         });
         const res = await fetch(`http://localhost:34565/leaderboard/subscribe/${entryToUpdate.id}`, { signal });
-        console.info(`Subscribed: send change`);
         // Trigger an update now that we are listening
         await repository.updateLeaderboardEntry(entryToUpdate.id, { proofState: 'proved' });
         let found = await processChunkedResponse(res, (text) => {
-                    console.info(`Received text: ${text}`);
                     return text.includes('proved');
                 });
-        console.info(`Found: ${found}`);
         expect(found).toBe(true);
     });
 });
@@ -204,13 +201,10 @@ function processChunkedResponse(response: Response, checkData: (text: string) =>
 
     function checkChunk(result: any, checkData: (text: string) => boolean) : any {
         var chunk = decoder.decode(result.value || new Uint8Array, { stream: !result.done });
-        console.info(`got chunk of ${chunk.length} bytes`)
         found = checkData(chunk);
         if (found || result.done) {
-            console.info('returning')
             return found;
         } 
-        console.info('recursing')
         return readChunk(checkData);
     }
 }
