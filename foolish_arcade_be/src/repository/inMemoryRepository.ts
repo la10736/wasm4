@@ -65,14 +65,12 @@ export class InMemoryRepository implements IRepository {
     }
 
     async updateLeaderboardEntry(id: string, updates: { proofState: ProofState }): Promise<LeaderboardEntry | undefined> {
-        console.info(`Updating entry ${id} to proofState ${updates.proofState}}`);
         const entry = this.leaderboard.find(e => e.id === id);
         if (!entry) {
             return undefined;
         }
         entry.proofState = updates.proofState;
-        this.emitter.emit('leaderboardUpdate', { id, proofState: entry.proofState });
-        console.info(`Updated entry ${id} to proofState ${entry.proofState}`);
+        this.emitter.emit('update', { id, proofState: entry.proofState });
         return entry;
     }
 

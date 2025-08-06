@@ -83,9 +83,6 @@ export class FileRepository implements IRepository {
         this.data.leaderboard.sort((a, b) => b.score - a.score);
         await this.saveData();
 
-        const position = this.data.leaderboard.findIndex(e => e.id === newEntry.id) + 1;
-        this.emitter.emit('leaderboardUpdate', { entry: newEntry, position });
-
         return newEntry;
     }
 
@@ -113,21 +110,17 @@ export class FileRepository implements IRepository {
 
     async updateLeaderboardEntry(id: string, updates: { proofState: ProofState }): Promise<LeaderboardEntry | undefined> {
         await this.initialization;
-        const entryIndex = this.data.leaderboard.findIndex(e => e.id === id);
-        if (entryIndex === -1) {
+
+        const entry = this.data.leaderboard.find(e => e.id === id);
+        if (!entry) {
             return undefined;
         }
-
-        const updatedEntry = { ...this.data.leaderboard[entryIndex], ...updates };
-        this.data.leaderboard[entryIndex] = updatedEntry;
+        entry.proofState = updates.proofState;
 
         await this.saveData();
+        this.emitter.emit('update', { id, proofState: entry.proofState });
 
-        // The position does not change when only the proofState is updated
-        const position = entryIndex + 1;
-        this.emitter.emit('update', { entry: updatedEntry, position: position });
-
-        return updatedEntry;
+        return entry;
     }
 
     async getLeaderboardEntryNeighbors(id: string, before: number, after: number): Promise<{ entry: LeaderboardEntry, position: number }[] | undefined> {

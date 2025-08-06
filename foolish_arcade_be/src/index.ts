@@ -166,10 +166,10 @@ export function createApp(repository: IRepository) {
             console.error('Failed to get initial state for subscription', error);
         }
 
-        repository.emitter.on('leaderboardUpdate', onUpdate);
+        repository.emitter.on('update', onUpdate);
 
         req.on('close', () => {
-            repository.emitter.off('leaderboardUpdate', onUpdate);
+            repository.emitter.off('update', onUpdate);
             res.end();
         });
         console.info(`subscribe end ${id}`);
