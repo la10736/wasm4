@@ -40,6 +40,9 @@ export class InMemoryRepository implements IRepository {
             health: entryData.health,
             createdAt: new Date().toISOString(),
             proofState: 'inserted',
+            game_seed: entryData.seed,
+            events_serialized: entryData.serialized_events,
+            max_frames: entryData.max_frames,
         };
         this.leaderboard.push(newEntry);
         this.leaderboard.sort((a, b) => b.score - a.score); // Sort by score descending

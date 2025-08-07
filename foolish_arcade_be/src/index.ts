@@ -7,6 +7,7 @@ import { InMemoryRepository } from './repository/inMemoryRepository';
 import { FileRepository } from './repository/fileRepository';
 
 const JWT_SECRET = 'your-super-secret-key'; // In a real app, use an environment variable
+const PROVER_JSON_RPC_URL = 'http://localhost:3030'; // Address of the proving service
 
 export function createApp(repository: IRepository) {
     const app: Application = express();
@@ -96,6 +97,11 @@ export function createApp(repository: IRepository) {
             };
             const newEntry = await repository.addLeaderboardEntry(entryData);
             console.info(`Added leaderboard entry ${JSON.stringify(newEntry)}`)
+
+            // Start the proof generation process asynchronously
+            requestProof(newEntry, repository);
+
+            console.info(`Requesting proof for entry: ${newEntry.id}`);
             res.json({ message: 'Game data submitted successfully', entryId: newEntry.id });
         } catch (error) {
             res.status(500).json({ error: 'Internal server error' });
@@ -191,6 +197,57 @@ export function createApp(repository: IRepository) {
     });
 
     return app;
+}
+
+async function requestProof(entry: LeaderboardEntry, repository: IRepository) {
+    console.log(`Requesting proof for entry: ${entry.id}`);
+    try {
+        // The address is already a string, which is fine for JSON
+        // The events_serialized is also a string.
+        // The user address is a hex string (e.g., "0x..."). It needs to be converted to a byte array.
+        const addressBytes = Buffer.from(entry.user.slice(2), 'hex');
+
+        // The events_serialized is stored as a Uint8Array, which serializes to an object.
+        // We need to convert it to a plain array of numbers for the JSON-RPC call.
+        const eventsArray = Array.from(entry.events_serialized);
+
+        const params = [
+            Array.from(addressBytes), // Convert Buffer to a plain array
+            entry.game_seed,
+            eventsArray,
+            entry.max_frames
+        ];
+
+        const response = await fetch(PROVER_JSON_RPC_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'prove',
+                params: params,
+                id: 1,
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Prover service responded with status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        if (result.error) {
+            throw new Error(`Prover service error: ${result.error.message}`);
+        }
+
+        console.log(`Proof received for entry: ${entry.id}, updating state.`);
+        await repository.updateLeaderboardEntry(entry.id, { proofState: 'proved' });
+
+    } catch (error) {
+        console.error(`Failed to get proof for entry ${entry.id}:`, error);
+        // Optionally, update the state to 'failed'
+        await repository.updateLeaderboardEntry(entry.id, { proofState: 'failed' });
+    }
 }
 
 if (require.main === module) {

@@ -5,7 +5,7 @@
   "scripts": {
     "build": "tsc",
     "start": "npm run build && node dist/index.js",
-    "dev": "nodemon src/index.ts",
+    "dev": "nodemon --watch src src/index.ts",
     "test": "jest"
   },
   "keywords": [],
