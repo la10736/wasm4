@@ -1,3 +1,6 @@
+import * as dotenv from 'dotenv';
+dotenv.config();
+
 import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
@@ -6,8 +9,13 @@ import { IRepository, LeaderboardEntry, User, GameSubmissionData, ProofState } f
 import { InMemoryRepository } from './repository/inMemoryRepository';
 import { FileRepository } from './repository/fileRepository';
 
-const JWT_SECRET = 'your-super-secret-key'; // In a real app, use an environment variable
-const PROVER_JSON_RPC_URL = 'http://localhost:3030'; // Address of the proving service
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+    console.error("FATAL ERROR: JWT_SECRET is not defined in the .env file.");
+    process.exit(1);
+}
+
+const PROVER_JSON_RPC_URL = process.env.PROVER_JSON_RPC_URL || 'http://localhost:3030';
 
 export function createApp(repository: IRepository) {
     const app: Application = express();
@@ -52,7 +60,7 @@ export function createApp(repository: IRepository) {
 
             // Signature is valid, update nonce and issue token
             const updatedUser = await repository.updateUserNonce(address);
-            const token = jwt.sign({ address: updatedUser.address }, JWT_SECRET, { expiresIn: '1h' });
+            const token = jwt.sign({ address: updatedUser.address }, JWT_SECRET!, { expiresIn: '1h' });
             res.json({ token });
 
         } catch (error) {
@@ -68,7 +76,7 @@ export function createApp(repository: IRepository) {
 
         if (token == null) return res.sendStatus(401);
 
-        jwt.verify(token, JWT_SECRET, (err: any, payload: any) => {
+        jwt.verify(token, JWT_SECRET!, (err: any, payload: any) => {
             if (err) return res.sendStatus(403);
             (req as any).user = payload;
             next();
