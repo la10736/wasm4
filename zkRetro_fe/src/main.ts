@@ -4,6 +4,10 @@ import { ethers } from 'ethers';
 import Onboard from '@web3-onboard/core';
 import injectedModule from '@web3-onboard/injected-wallets';
 
+// Environment Variables
+const ETH_RPC_URL = import.meta.env.ETH_RPC_URL;
+const BACKEND_ADDRESS = import.meta.env.BACKEND_ADDRESS;
+
 // UI Elements
 const connectButton = document.getElementById('connect-button') as HTMLButtonElement;
 const disconnectButton = document.getElementById('disconnect-button') as HTMLButtonElement;
@@ -27,13 +31,7 @@ const onboard = Onboard({
             id: '0x1',
             token: 'ETH',
             label: 'Ethereum Mainnet',
-            rpcUrl: 'https://cloudflare-eth.com' // Public RPC
-        },
-        {
-            id: '0xaa36a7',
-            token: 'ETH',
-            label: 'Sepolia Testnet',
-            rpcUrl: 'https://rpc2.sepolia.org' // Public RPC
+            rpcUrl: ETH_RPC_URL
         }
     ],
     appMetadata: {
@@ -65,7 +63,7 @@ async function handleLogin(wallet: any) {
         const signer = await ethersProvider.getSigner();
 
         // 1. Get challenge from backend
-        const challengeResponse = await fetch(`http://localhost:3000/challenge?address=${address}`);
+        const challengeResponse = await fetch(`${BACKEND_ADDRESS}/challenge?address=${address}`);
         if (!challengeResponse.ok) throw new Error(`Failed to get challenge: ${await challengeResponse.text()}`);
         const { message } = await challengeResponse.json();
 
@@ -73,7 +71,7 @@ async function handleLogin(wallet: any) {
         const signature = await signer.signMessage(message);
 
         // 3. Login to backend
-        const loginResponse = await fetch('http://localhost:3000/login', {
+        const loginResponse = await fetch(`${BACKEND_ADDRESS}/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ address, signature }),
@@ -174,7 +172,7 @@ async function startGame() {
     }
 }
 
-async function submitGameData(gameData: { persistentData: any, events_serialized: string }) {
+async function submitGameData(gameData: { persistentData: any, events_serialized: Uint8Array }) {
     if (!jwtToken) {
         console.error('No JWT token, cannot submit game data.');
         return;
@@ -204,7 +202,7 @@ async function submitGameData(gameData: { persistentData: any, events_serialized
         };
 
 
-        const response = await fetch('http://localhost:3000/submit_game', {
+        const response = await fetch(`${BACKEND_ADDRESS}/submit_game`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -258,7 +256,7 @@ onboard.state.select('wallets').subscribe((wallets) => {
 
 
 
-playAgainButton.addEventListener('click', () => {
+playAgainButton.addEventListener('click', async () => {
     leaderboardContainer.style.display = 'none';
     leaderboardControls.style.display = 'none';
     gameView.style.display = 'block';
@@ -266,12 +264,14 @@ playAgainButton.addEventListener('click', () => {
     // Close active SSE connections when leaving the leaderboard
     activeSseConnections.forEach(conn => conn.close());
     activeSseConnections = [];
+
+    await startGame();
 });
 
 async function showLeaderboard(entryId?: string, before?: number, after?: number) {
     const url = entryId 
-        ? `http://localhost:3000/leaderboard/neighbors/${entryId}${before ? `?before=${before}` : ''}${after ? `&after=${after}` : ''}` 
-        : 'http://localhost:3000/leaderboard/neighbors';
+        ? `${BACKEND_ADDRESS}/leaderboard/neighbors/${entryId}${before ? `?before=${before}` : ''}${after ? `&after=${after}` : ''}` 
+        : `${BACKEND_ADDRESS}/leaderboard/neighbors`;
 
     console.info(`Fetching leaderboard from ${url}`)
 
@@ -306,7 +306,7 @@ async function showLeaderboard(entryId?: string, before?: number, after?: number
             `;
 
             // // Subscribe to real-time updates for this entry
-            // const sse = new EventSource(`http://localhost:3000/leaderboard/subscribe/${entry.id}`);
+            // const sse = new EventSource(`${BACKEND_ADDRESS}/leaderboard/subscribe/${entry.id}`);
             // sse.onmessage = (event) => {
             //     const data = JSON.parse(event.data);
             //     const targetRow = leaderboardBody.querySelector(`[data-entry-id="${entry.id}"]`);

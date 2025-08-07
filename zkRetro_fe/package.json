@@ -15,6 +15,7 @@
   "dependencies": {
     "@web3-onboard/core": "^2.24.1",
     "@web3-onboard/injected-wallets": "^2.11.3",
+    "dotenv": "^17.2.1",
     "ethers": "^6.11.1"
   }
 }
