@@ -9,32 +9,28 @@
   <body>
     <div id="app">
       <div id="scanline-overlay"></div>
-      <div id="game-view">
-        <h1>zkvRetro Arcade</h1>
-        <div id="wallet-status">
-          <!-- Wallet status is dynamically updated by main.ts -->
-        </div>
-        <div id="controls">
-          <button id="connect-button">Connect Wallet</button>
-          <button id="start-button" style="display: none;">Start Game</button>
-          <button id="disconnect-button" style="display: none;">Disconnect</button>
-        </div>
+      <h1>zkvRetro Arcade</h1>
+      <div id="wallet-status">
+        <!-- Wallet status is dynamically updated by main.ts -->
       </div>
-
       <div id="leaderboard-container" style="display: none;">
         <h2>Leaderboard</h2>
         <table>
           <thead>
             <tr>
-              <th>Rank</th>
-              <th>Player</th>
-              <th>Score</th>
-              <th>Time</th>
-              <th>Health</th>
+              <th class="rank-col">Rank</th>
+              <th class="score-col">Score</th>
+              <th class="user-col">Player</th>
+              <th>Proof</th>
             </tr>
           </thead>
           <tbody id="leaderboard-body"></tbody>
         </table>
+      </div>
+      <div id="controls">
+          <button id="connect-button">Connect Wallet</button>
+          <button id="start-button" style="display: none;">Start Game</button>
+          <button id="disconnect-button" style="display: none;">Disconnect</button>
       </div>
       <div id="leaderboard-controls">
           <button id="play-again-button">PLAY AGAIN</button>

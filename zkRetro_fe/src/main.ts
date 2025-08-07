@@ -13,7 +13,6 @@ const connectButton = document.getElementById('connect-button') as HTMLButtonEle
 const disconnectButton = document.getElementById('disconnect-button') as HTMLButtonElement;
 const startButton = document.getElementById('start-button')!;
 const gameContainer = document.getElementById('game-container')!;
-const gameView = document.getElementById('game-view')!;
 const leaderboardContainer = document.getElementById('leaderboard-container')!;
 const leaderboardBody = document.getElementById('leaderboard-body')! as HTMLTableSectionElement;
 const playAgainButton = document.getElementById('play-again-button')! as HTMLButtonElement;
@@ -108,7 +107,7 @@ async function updateUI(wallet: any | null) {
         connectButton.style.display = 'none';
         disconnectButton.style.display = 'block';
         startButton.style.display = 'block';
-        leaderboardContainer.style.display = 'none'; // Hide on connect
+        leaderboardContainer.style.display = 'block'; // Hide on connect
 
     } else {
         walletStatusDiv.textContent = 'Not connected';
@@ -217,7 +216,6 @@ async function submitGameData(gameData: { persistentData: any, events_serialized
             if (result.entryId) {
                 console.log(`Submission successful, entry ID: ${result.entryId}`);
                 document.body.classList.remove('game-active');
-                gameView.style.display = 'none';
                 leaderboardContainer.style.display = 'block';
                 leaderboardControls.style.display = 'flex'; // Show controls after game
                 await showLeaderboard(result.entryId, 5, 5);
@@ -259,7 +257,6 @@ onboard.state.select('wallets').subscribe((wallets) => {
 playAgainButton.addEventListener('click', async () => {
     leaderboardContainer.style.display = 'none';
     leaderboardControls.style.display = 'none';
-    gameView.style.display = 'block';
     document.body.classList.remove('game-active');
     // Close active SSE connections when leaving the leaderboard
     activeSseConnections.forEach(conn => conn.close());
@@ -269,8 +266,8 @@ playAgainButton.addEventListener('click', async () => {
 });
 
 async function showLeaderboard(entryId?: string, before?: number, after?: number) {
-    const url = entryId 
-        ? `${BACKEND_ADDRESS}/leaderboard/neighbors/${entryId}${before ? `?before=${before}` : ''}${after ? `&after=${after}` : ''}` 
+    const url = entryId
+        ? `${BACKEND_ADDRESS}/leaderboard/neighbors/${entryId}${before ? `?before=${before}` : ''}${after ? `&after=${after}` : ''}`
         : `${BACKEND_ADDRESS}/leaderboard/neighbors`;
 
     console.info(`Fetching leaderboard from ${url}`)
@@ -296,29 +293,13 @@ async function showLeaderboard(entryId?: string, before?: number, after?: number
             if (entry.id === entryId) {
                 row.classList.add('current-player');
             }
+
             row.innerHTML = `
-                <td class="position">${position}</td>
+                <td class="rank-col">${position}</td>
+                <td class="score-col">${entry.score}</td>
                 <td class="user">${shortenAddress(entry.user)}</td>
-                <td class="score">${entry.score}</td>
-                <td class="time">${(entry.time / 60).toFixed(2)}s</td>
-                <td class="health">${entry.health}</td>
                 <td class="proof-state">${entry.proofState}</td>
             `;
-
-            // // Subscribe to real-time updates for this entry
-            // const sse = new EventSource(`${BACKEND_ADDRESS}/leaderboard/subscribe/${entry.id}`);
-            // sse.onmessage = (event) => {
-            //     const data = JSON.parse(event.data);
-            //     const targetRow = leaderboardBody.querySelector(`[data-entry-id="${entry.id}"]`);
-            //     if (targetRow) {
-            //         const proofStateCell = targetRow.querySelector('.proof-state');
-            //         if (proofStateCell) proofStateCell.textContent = data.proofState;
-                    
-            //         const positionCell = targetRow.querySelector('.position');
-            //         if (positionCell && data.position) positionCell.textContent = data.position;
-            //     }
-            // };
-            // activeSseConnections.push(sse);
         });
 
     } catch (error) {
