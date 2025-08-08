@@ -298,6 +298,8 @@ async function requestProof(game: GameSubmissionData, leaderboard_id: string, re
 
     const id = randomInt(1, 1000000);
 
+    await repository.updateLeaderboardEntry(leaderboard_id, { proofState: 'proving' });
+
     const response = await fetch(PROVER_JSON_RPC_URL, {
         method: 'POST',
         headers: {
@@ -315,7 +317,6 @@ async function requestProof(game: GameSubmissionData, leaderboard_id: string, re
         throw new Error(`Prover service responded with status: ${response.status}`);
     }
 
-    await repository.updateLeaderboardEntry(leaderboard_id, { proofState: 'proving' });
     const result = await response.json();
     if (result.error) {
         throw new Error(`Prover service error: ${result.error.message}`);
