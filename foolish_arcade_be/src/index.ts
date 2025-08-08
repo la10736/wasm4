@@ -164,7 +164,7 @@ export function createApp(repository: IRepository) {
     app.get('/leaderboard/subscribe/:id', async (req: Request, res: Response) => {
         const { id } = req.params;
 
-        res.setHeader("Transfer-Encoding", "chunked")
+        // res.setHeader("Transfer-Encoding", "chunked")
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');

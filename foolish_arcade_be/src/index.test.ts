@@ -190,7 +190,7 @@ describe('Leaderboard SSE API', () => {
 
 function processChunkedResponse(response: Response, checkData: (text: string) => boolean) : any {
     var found = false;
-    var reader = response.body?.getReader()
+    var reader = response.body?.getReader();
     var decoder = new TextDecoder();
 
     return readChunk(checkData);

@@ -9,6 +9,7 @@ export default ({ mode }) => {
     define: {
       'import.meta.env.ETH_RPC_URL': JSON.stringify(env.ETH_RPC_URL),
       'import.meta.env.BACKEND_ADDRESS': JSON.stringify(env.BACKEND_ADDRESS),
+      'import.meta.env.EXPLORER_ADDRESS': JSON.stringify(env.EXPLORER_ADDRESS),
     },
   });
 }

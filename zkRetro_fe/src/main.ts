@@ -7,6 +7,7 @@ import injectedModule from '@web3-onboard/injected-wallets';
 // Environment Variables
 const ETH_RPC_URL = import.meta.env.ETH_RPC_URL;
 const BACKEND_ADDRESS = import.meta.env.BACKEND_ADDRESS;
+const EXPLORER_ADDRESS = import.meta.env.EXPLORER_ADDRESS;
 
 // UI Elements
 const title = document.getElementById('title')!;
@@ -298,11 +299,46 @@ async function showLeaderboard(entryId?: string, before?: number, after?: number
             }
 
             // Format proof state display
-            let proofStateHtml = '';
-            if (typeof entry.proofState === 'object' && entry.proofState !== null) {
-                const settled = entry.proofState as { blockHash: string, txHash: string };
-                const subscanUrl = `https://zkverify-testnet.subscan.io/extrinsic/${settled.txHash}`;
-                proofStateHtml = `
+            let proofStateHtml = renderProfState(entry.proofState);
+
+            row.innerHTML = `
+                <td class="rank-col">${position}</td>
+                <td class="score-col">${entry.score}</td>
+                <td class="user">${shortenAddress(entry.user)}</td>
+                <td class="proof-state">${proofStateHtml}</td>
+            `;
+
+
+            // Subscribe to real-time updates for this entry
+            // const sse = new EventSource(`${BACKEND_ADDRESS}/leaderboard/subscribe/${entry.id}`);
+            // sse.onmessage = (event) => {
+            //     const data = JSON.parse(event.data);
+            //     console.info(`Received update for entry ${entry.id}: ${JSON.stringify(data)}`);
+            //     const targetRow = leaderboardBody.querySelector(`[data-entry-id="${entry.id}"]`);
+            //     if (targetRow && data.proofState !== undefined) {
+            //         console.info(`Updating proof state for entry ${entry.id}`);
+            //         const proofStateCell = targetRow.querySelector('.proof-state');
+            //         if (proofStateCell) proofStateCell.innerHTML = renderProfState(data.proofState);
+            //     }
+            // };
+            // sse.onerror = () => sse.close();
+            // activeSseConnections.push(sse);
+
+        });
+
+    } catch (error) {
+        console.error('Error fetching leaderboard:', error);
+        alert('An error occurred while fetching the leaderboard.');
+    }
+}
+
+function renderProfState(state: any) {
+    let proofStateHtml = '';
+    if (typeof state === 'object' && state !== null) {
+        const settled = state as { blockHash: string; txHash: string; };
+        const subscanUrl = `${EXPLORER_ADDRESS}/extrinsic/${settled.txHash}`;
+        console.info(`Rendering proof state: ${JSON.stringify(state)}, subscanUrl: ${subscanUrl}`);
+        proofStateHtml = `
                     <span class="proof-state-settled">
                         settled
                         <a href="${subscanUrl}" target="_blank" rel="noopener noreferrer" class="subscan-link">
@@ -314,23 +350,10 @@ async function showLeaderboard(entryId?: string, before?: number, after?: number
                         </a>
                     </span>
                 `;
-            } else {
-                proofStateHtml = `<span class="proof-state-${entry.proofState.toLowerCase()}">${entry.proofState}</span>`;
-            }
-
-            row.innerHTML = `
-                <td class="rank-col">${position}</td>
-                <td class="score-col">${entry.score}</td>
-                <td class="user">${shortenAddress(entry.user)}</td>
-                <td class="proof-state">${proofStateHtml}</td>
-            `;
-        });
-
-    } catch (error) {
-        console.error('Error fetching leaderboard:', error);
-        alert('An error occurred while fetching the leaderboard.');
+    } else {
+        proofStateHtml = `<span class="proof-state-${state.toLowerCase()}">${state}</span>`;
     }
+    return proofStateHtml;
 }
 
-// Initial UI state
 updateUI(null);
