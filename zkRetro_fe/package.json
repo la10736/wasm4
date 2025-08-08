@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "host": "vite --host",
+    "host": "vite --host 0.0.0.0",
     "preview": "vite preview"
   },
   "devDependencies": {
