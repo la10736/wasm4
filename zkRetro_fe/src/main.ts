@@ -9,6 +9,7 @@ const ETH_RPC_URL = import.meta.env.ETH_RPC_URL;
 const BACKEND_ADDRESS = import.meta.env.BACKEND_ADDRESS;
 
 // UI Elements
+const title = document.getElementById('title')!;
 const connectButton = document.getElementById('connect-button') as HTMLButtonElement;
 const disconnectButton = document.getElementById('disconnect-button') as HTMLButtonElement;
 const startButton = document.getElementById('start-button')!;
@@ -153,6 +154,7 @@ startButton.addEventListener('click', async () => {
 });
 
 async function startGame() {
+    title.style.display = 'none';
     document.body.classList.add('game-active');
     gameContainer.innerHTML = ''; // Clear previous game instance
     const wasm4 = new (window as any).Wasm4({ container: gameContainer });
@@ -169,6 +171,7 @@ async function startGame() {
     } catch (err) {
         console.error('Error during game execution:', err);
     }
+    title.style.display = 'block';
 }
 
 async function submitGameData(gameData: { persistentData: any, events_serialized: Uint8Array }) {
