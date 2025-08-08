@@ -5,7 +5,7 @@ import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import { ethers } from 'ethers';
-import { IRepository, LeaderboardEntry, User, GameSubmissionData, ProofState } from './repository/types';
+import { IRepository, LeaderboardEntry, User, GameSubmissionData, ProofState, Settled } from './repository/types';
 import { FileRepository } from './repository/fileRepository';
 import { randomInt } from 'crypto';
 import axios from 'axios';
@@ -265,7 +265,10 @@ async function submitProof(proofData: ProofData, leaderboard_id: string, reposit
         const jobStatusResponse = await axios.get(`${RELAYER_API_URL}/job-status/${RELAYER_API_KEY}/${requestResponse.data.jobId}`);
         if (jobStatusResponse.data.status === "Finalized") {
             console.info(`Job finalized successfully for entry: ${leaderboard_id} response: ${JSON.stringify(jobStatusResponse.data)}`);
-            await repository.updateLeaderboardEntry(leaderboard_id, { proofState: 'settled' });
+            await repository.updateLeaderboardEntry(leaderboard_id, { proofState: {
+                blockHash: jobStatusResponse.data.blockHash,
+                txHash: jobStatusResponse.data.txHash
+            } as Settled });
             break;
         } else {
             console.info(`Job status: ${jobStatusResponse.data.status} for entry: ${leaderboard_id}`);

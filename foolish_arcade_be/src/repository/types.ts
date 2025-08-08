@@ -5,7 +5,13 @@ export interface User {
     nonce: number;
 }
 
-export type ProofState = 'inserted' | 'proving' | 'proved' | 'settled' | 'failed';
+export interface Settled {
+    blockHash: string;
+    txHash: string;
+}
+    
+
+export type ProofState = 'inserted' | 'proving' | 'proved' | Settled | 'failed';
 
 export interface LeaderboardEntry {
     id: string;

@@ -289,6 +289,68 @@ body.game-active #scanline-overlay {
   text-shadow: none;
 }
 
+/* Proof State Styles */
+.proof-state {
+  text-transform: capitalize;
+  color: var(--primary-color);
+  font-size: 0.8em;
+  text-align: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+}
+
+.proof-state-settled {
+  color: #00ff00;
+  text-shadow: 0 0 5px #00ff00;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.proof-state-inserted {
+  color: #ffff00;
+  text-shadow: 0 0 5px #ffff00;
+}
+
+.proof-state-proving {
+  color: #ff9900;
+  text-shadow: 0 0 5px #ff9900;
+  animation: pulse 2s infinite;
+}
+
+.proof-state-proved {
+  color: #00ccff;
+  text-shadow: 0 0 5px #00ccff;
+}
+
+.proof-state-failed {
+  color: #ff3300;
+  text-shadow: 0 0 5px #ff3300;
+}
+
+.subscan-link {
+  display: inline-flex;
+  align-items: center;
+  color: #00ff00;
+  text-decoration: none;
+  transition: transform 0.2s;
+  margin-left: 4px;
+}
+
+.subscan-link:hover {
+  transform: scale(1.2);
+  color: #00ff00;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
 #leaderboard-container .current-player td {
   background-color: rgba(0, 255, 0, 0.25); /* Brighter background */
   box-shadow: 0 0 12px rgba(0, 255, 0, 0.8); /* More prominent shadow */

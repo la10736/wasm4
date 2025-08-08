@@ -297,11 +297,32 @@ async function showLeaderboard(entryId?: string, before?: number, after?: number
                 row.classList.add('current-player');
             }
 
+            // Format proof state display
+            let proofStateHtml = '';
+            if (typeof entry.proofState === 'object' && entry.proofState !== null) {
+                const settled = entry.proofState as { blockHash: string, txHash: string };
+                const subscanUrl = `https://zkverify-testnet.subscan.io/extrinsic/${settled.txHash}`;
+                proofStateHtml = `
+                    <span class="proof-state-settled">
+                        settled
+                        <a href="${subscanUrl}" target="_blank" rel="noopener noreferrer" class="subscan-link">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00ff00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                <polyline points="15 3 21 3 21 9"></polyline>
+                                <line x1="10" y1="14" x2="21" y2="3"></line>
+                            </svg>
+                        </a>
+                    </span>
+                `;
+            } else {
+                proofStateHtml = `<span class="proof-state-${entry.proofState.toLowerCase()}">${entry.proofState}</span>`;
+            }
+
             row.innerHTML = `
                 <td class="rank-col">${position}</td>
                 <td class="score-col">${entry.score}</td>
                 <td class="user">${shortenAddress(entry.user)}</td>
-                <td class="proof-state">${entry.proofState}</td>
+                <td class="proof-state">${proofStateHtml}</td>
             `;
         });
 
