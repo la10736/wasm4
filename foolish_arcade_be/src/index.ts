@@ -9,7 +9,7 @@ import { IRepository, LeaderboardEntry, User, GameSubmissionData, ProofState } f
 import { FileRepository } from './repository/fileRepository';
 import { randomInt } from 'crypto';
 import axios from 'axios';
-import fs from 'fs';
+import * as z85 from "./z85";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -232,7 +232,6 @@ async function processGame(game: GameSubmissionData, leaderboard_id: string, rep
     try {
         const proofData = await requestProof(game, leaderboard_id, repository);
         await submitProof(proofData, leaderboard_id, repository);
-        await repository.updateLeaderboardEntry(leaderboard_id, { proofState: 'settled' });
     } catch (error) {
         console.error(`Failed to get proof for entry ${leaderboard_id}:`, error);
         // Optionally, update the state to 'failed'
@@ -241,7 +240,6 @@ async function processGame(game: GameSubmissionData, leaderboard_id: string, rep
 }
 
 async function submitProof(proofData: ProofData, leaderboard_id: string, repository: IRepository) {
-    // const vk = await registerVk();
     console.info(`Submitting proof for entry: ${leaderboard_id}`);
     const params = {
         "proofType": "risc0",
@@ -267,6 +265,7 @@ async function submitProof(proofData: ProofData, leaderboard_id: string, reposit
         const jobStatusResponse = await axios.get(`${RELAYER_API_URL}/job-status/${RELAYER_API_KEY}/${requestResponse.data.jobId}`);
         if (jobStatusResponse.data.status === "Finalized") {
             console.info(`Job finalized successfully for entry: ${leaderboard_id} response: ${JSON.stringify(jobStatusResponse.data)}`);
+            await repository.updateLeaderboardEntry(leaderboard_id, { proofState: 'settled' });
             break;
         } else {
             console.info(`Job status: ${jobStatusResponse.data.status} for entry: ${leaderboard_id}`);
@@ -282,9 +281,10 @@ async function requestProof(game: GameSubmissionData, leaderboard_id: string, re
     // The user address is a hex string (e.g., "0x..."). It needs to be converted to a byte array.
     const addressBytes = Buffer.from(game.user.slice(2), 'hex');
 
-    // The events_serialized is stored as a Uint8Array, which serializes to an object.
-    // We need to convert it to a plain array of numbers for the JSON-RPC call.
-    const eventsArray = Array.from(game.serialized_events);
+    // The events_serialized is stored as a z58 string: we should decode it to a byte array.
+    const buffer = new Uint8Array(game.serialized_events.length/5*4);
+    z85.decode(game.serialized_events, buffer);
+    const eventsArray = Array.from(buffer);
 
     const params = [
         Array.from(addressBytes), // Convert Buffer to a plain array

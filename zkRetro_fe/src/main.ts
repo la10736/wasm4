@@ -174,7 +174,7 @@ async function startGame() {
     title.style.display = 'block';
 }
 
-async function submitGameData(gameData: { persistentData: any, events_serialized: Uint8Array }) {
+async function submitGameData(gameData: { persistentData: any, events_serialized: string }) {
     if (!jwtToken) {
         console.error('No JWT token, cannot submit game data.');
         return;

@@ -16,7 +16,7 @@ export interface LeaderboardEntry {
     createdAt: string; // ISO 8601 format
     proofState: ProofState;
     game_seed: number;
-    events_serialized: Uint8Array;
+    events_serialized: string;
     max_frames: number;
 }
 
@@ -28,7 +28,7 @@ export interface GameSubmissionData {
     seed: number;
     max_frames: number;
     game_mode: number;
-    serialized_events: Uint8Array;
+    serialized_events: string;
 }
 
 export interface IRepository {

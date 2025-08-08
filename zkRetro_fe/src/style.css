@@ -46,16 +46,18 @@ body {
   justify-content: space-around;
   align-items: center;
 
-  margin: auto; /* Center the box on the page */
+  margin: 20px auto; /* Center the box on the page with top margin */
   width: 90vmin;
-  height: 90vmin;
-
+  min-height: 90vmin;
+  max-height: 90vh;
   text-align: center;
   border: 4px solid var(--primary-color);
   box-shadow: 0 0 20px var(--primary-color) inset, 0 0 20px var(--primary-color);
   background: #080808;
   padding: 2rem;
   box-sizing: border-box; /* Ensure padding is included in width/height */
+  display: flex;
+  flex-direction: column;
 }
 
 body.game-active #game-view,
@@ -67,11 +69,29 @@ body.game-active #scanline-overlay {
     display: none;
 }
 
+/* Header Container */
+#header-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  width: 100%;
+  margin-bottom: 1.5rem;
+}
+
+#wallet-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+  text-align: right;
+}
+
 #controls {
   display: flex;
   flex-direction: row;
   gap: 1rem;
-  justify-content: center;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
 }
 
 #wallet-status {
@@ -98,6 +118,156 @@ body.game-active #scanline-overlay {
   font-size: clamp(0.5rem, 1vmin, 0.8rem);
   table-layout: fixed; /* Helps with responsive table layouts */
 }
+
+/* Instructions Button */
+#instructions-container {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 1000;
+}
+
+#instructions-button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
+  color: #000;
+  border: 2px solid #000;
+  font-family: var(--font-family);
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  box-shadow: 0 0 10px var(--primary-color);
+  transition: all 0.3s ease;
+}
+
+#instructions-button:hover {
+  background-color: #fff;
+  transform: scale(1.1);
+}
+
+#instructions-tooltip {
+  position: absolute;
+  bottom: 50px;
+  left: 0;
+  background-color: rgba(0, 0, 0, 0.9);
+  border: 2px solid var(--primary-color);
+  border-radius: 8px;
+  padding: 15px;
+  width: 130px;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 0 15px var(--primary-color);
+  z-index: 1001;
+}
+
+#instructions-tooltip img {
+  width: 100%;
+  height: auto;
+  margin-bottom: 10px;
+}
+
+#instructions-tooltip p {
+  color: var(--primary-color);
+  font-size: 8px;
+  margin: 5px 0 0;
+  text-align: center;
+  line-height: 1.4;
+}
+
+#instructions-container:hover #instructions-tooltip {
+  display: flex;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.tooltip-arrow {
+  position: absolute;
+  bottom: -10px;
+  left: 20px;
+  width: 0;
+  height: 0;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-top: 10px solid var(--primary-color);
+}
+
+/* Controls Display */
+.controls-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: 15px;
+}
+
+.arrow-keys {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.arrow-row {
+  display: flex;
+  gap: 5px;
+}
+
+.arrow-up,
+.arrow-down,
+.arrow-left,
+.arrow-right,
+.x-key {
+  width: 15px;
+  height: 15px;
+  background-color: #222;
+  border: 2px solid var(--primary-color);
+  color: var(--primary-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  border-radius: 4px;
+  box-shadow: 0 0 5px var(--primary-color);
+  margin: 2px;
+}
+
+.x-key {
+  width: 15px;
+  height: 15px;
+  font-size: 8px;
+  background-color: #333;
+  margin-left: 5px;
+  position: relative;
+}
+
+.x-key::after {
+  content: "";
+  position: absolute;
+  left: 25px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 2px;
+  background-color: var(--primary-color);
+}
+
+.arrow-down,
+.arrow-left,
+.arrow-right {
+  margin-top: 1px; 
+  margin-left: 2px;
+}
+
 
 #leaderboard-container th,
 #leaderboard-container td {
