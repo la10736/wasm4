@@ -6,8 +6,10 @@ import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import { ethers } from 'ethers';
 import { IRepository, LeaderboardEntry, User, GameSubmissionData, ProofState } from './repository/types';
-import { InMemoryRepository } from './repository/inMemoryRepository';
 import { FileRepository } from './repository/fileRepository';
+import { randomInt } from 'crypto';
+import axios from 'axios';
+import fs from 'fs';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -15,7 +17,17 @@ if (!JWT_SECRET) {
     process.exit(1);
 }
 
+const RELAYER_API_KEY = process.env.RELAYER_API_KEY;
+if (!RELAYER_API_KEY) {
+    console.error("FATAL ERROR: RELAYER_API_KEY is not defined in the .env file.");
+    process.exit(1);
+}
+
+const RELAYER_API_URL = process.env.RELAYER_API_URL || 'https://relayer-api.horizenlabs.io/api/v1';
+
 const PROVER_JSON_RPC_URL = process.env.PROVER_JSON_RPC_URL || 'http://localhost:3030';
+
+const VK = process.env.VK || '0xdceecd6f862080881919186844e86400f4c6772c0e21a9ebdf76c7ff947772af';
 
 export function createApp(repository: IRepository) {
     const app: Application = express();
@@ -107,9 +119,8 @@ export function createApp(repository: IRepository) {
             console.info(`Added leaderboard entry ${JSON.stringify(newEntry)}`)
 
             // Start the proof generation process asynchronously
-            requestProof(newEntry, repository);
+            processGame(entryData, newEntry.id, repository);
 
-            console.info(`Requesting proof for entry: ${newEntry.id}`);
             res.json({ message: 'Game data submitted successfully', entryId: newEntry.id });
         } catch (error) {
             res.status(500).json({ error: 'Internal server error' });
@@ -207,55 +218,115 @@ export function createApp(repository: IRepository) {
     return app;
 }
 
-async function requestProof(entry: LeaderboardEntry, repository: IRepository) {
-    console.log(`Requesting proof for entry: ${entry.id}`);
+interface ProofData {
+    bin_proof: Uint8Array,
+    bin_pubs: Uint8Array,
+    address: Uint8Array,
+    frames: number,
+    score: number,
+    health: number,
+}
+
+async function processGame(game: GameSubmissionData, leaderboard_id: string, repository: IRepository) {
+    console.info(`Processing game for entry: ${leaderboard_id}`);
     try {
-        // The address is already a string, which is fine for JSON
-        // The events_serialized is also a string.
-        // The user address is a hex string (e.g., "0x..."). It needs to be converted to a byte array.
-        const addressBytes = Buffer.from(entry.user.slice(2), 'hex');
-
-        // The events_serialized is stored as a Uint8Array, which serializes to an object.
-        // We need to convert it to a plain array of numbers for the JSON-RPC call.
-        const eventsArray = Array.from(entry.events_serialized);
-
-        const params = [
-            Array.from(addressBytes), // Convert Buffer to a plain array
-            entry.game_seed,
-            eventsArray,
-            entry.max_frames
-        ];
-
-        const response = await fetch(PROVER_JSON_RPC_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                jsonrpc: '2.0',
-                method: 'prove',
-                params: params,
-                id: 1,
-            }),
-        });
-
-        if (!response.ok) {
-            throw new Error(`Prover service responded with status: ${response.status}`);
-        }
-
-        const result = await response.json();
-        if (result.error) {
-            throw new Error(`Prover service error: ${result.error.message}`);
-        }
-
-        console.log(`Proof received for entry: ${entry.id}, updating state.`);
-        await repository.updateLeaderboardEntry(entry.id, { proofState: 'proved' });
-
+        const proofData = await requestProof(game, leaderboard_id, repository);
+        await submitProof(proofData, leaderboard_id, repository);
+        await repository.updateLeaderboardEntry(leaderboard_id, { proofState: 'settled' });
     } catch (error) {
-        console.error(`Failed to get proof for entry ${entry.id}:`, error);
+        console.error(`Failed to get proof for entry ${leaderboard_id}:`, error);
         // Optionally, update the state to 'failed'
-        await repository.updateLeaderboardEntry(entry.id, { proofState: 'failed' });
+        await repository.updateLeaderboardEntry(leaderboard_id, { proofState: 'failed' });
     }
+}
+
+async function submitProof(proofData: ProofData, leaderboard_id: string, repository: IRepository) {
+    // const vk = await registerVk();
+    console.info(`Submitting proof for entry: ${leaderboard_id}`);
+    const params = {
+        "proofType": "risc0",
+        "vkRegistered": false,
+        "proofOptions": {
+            "version": "V2_2"
+        },
+        "proofData": {
+            "proof": `0x${Buffer.from(proofData.bin_proof).toString('hex')}`,
+            "publicSignals": `0x${Buffer.from(proofData.bin_pubs).toString('hex')}`,
+            "vk": VK
+        }
+    }
+    const requestResponse = await axios.post(`${RELAYER_API_URL}/submit-proof/${RELAYER_API_KEY}`, params)
+    console.info(`Proof submitted for entry: ${leaderboard_id}, response: ${JSON.stringify(requestResponse.data)}`)
+
+    if (requestResponse.data.optimisticVerify != "success") {
+        console.error("Proof verification, check proof artifacts");
+        return;
+    }
+
+    while (true) {
+        const jobStatusResponse = await axios.get(`${RELAYER_API_URL}/job-status/${RELAYER_API_KEY}/${requestResponse.data.jobId}`);
+        if (jobStatusResponse.data.status === "Finalized") {
+            console.info(`Job finalized successfully for entry: ${leaderboard_id} response: ${JSON.stringify(jobStatusResponse.data)}`);
+            break;
+        } else {
+            console.info(`Job status: ${jobStatusResponse.data.status} for entry: ${leaderboard_id}`);
+            console.info("Waiting for job to finalize...");
+            await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for 5 seconds before checking again
+        }
+    }
+}
+
+async function requestProof(game: GameSubmissionData, leaderboard_id: string, repository: IRepository): Promise<ProofData> {
+    // The address is already a string, which is fine for JSON
+    // The events_serialized is also a string.
+    // The user address is a hex string (e.g., "0x..."). It needs to be converted to a byte array.
+    const addressBytes = Buffer.from(game.user.slice(2), 'hex');
+
+    // The events_serialized is stored as a Uint8Array, which serializes to an object.
+    // We need to convert it to a plain array of numbers for the JSON-RPC call.
+    const eventsArray = Array.from(game.serialized_events);
+
+    const params = [
+        Array.from(addressBytes), // Convert Buffer to a plain array
+        game.seed,
+        eventsArray,
+        game.max_frames
+    ];
+
+    const id = randomInt(1, 1000000);
+
+    const response = await fetch(PROVER_JSON_RPC_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'prove',
+            params: params,
+            id,
+        }),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Prover service responded with status: ${response.status}`);
+    }
+
+    await repository.updateLeaderboardEntry(leaderboard_id, { proofState: 'proving' });
+    const result = await response.json();
+    if (result.error) {
+        throw new Error(`Prover service error: ${result.error.message}`);
+    } else if (result.id !== id) {
+        throw new Error(`Prover service error: ODD ID ${result.id} != ${id}`);
+    } else if (result.result) {
+        const proofData: ProofData = result.result;
+        console.info(`Proof received for entry: ${leaderboard_id}, updating state.`);
+        await repository.updateLeaderboardEntry(leaderboard_id, { proofState: 'proved' });
+        return proofData;
+    } else {
+        throw new Error(`Prover service error: Malformed response neither error nor result`);
+    }
+
 }
 
 if (require.main === module) {
